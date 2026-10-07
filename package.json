@@ -14,15 +14,15 @@
     "国风"
   ],
   "license": "MIT",
-  "author": "REPLACE-ME (your name)",
+  "author": "Bancott",
   "type": "module",
   "icon": "./icon.svg",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/REPLACE-ME/dsh-yexueqing-skin.git"
+    "url": "git+https://github.com/Bancott/dsh-yexueqing-skin.git"
   },
-  "homepage": "https://github.com/REPLACE-ME/dsh-yexueqing-skin#readme",
-  "bugs": "https://github.com/REPLACE-ME/dsh-yexueqing-skin/issues",
+  "homepage": "https://github.com/Bancott/dsh-yexueqing-skin#readme",
+  "bugs": "https://github.com/Bancott/dsh-yexueqing-skin/issues",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

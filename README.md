@@ -400,7 +400,7 @@ ui-theme 文档化了若干**局部重绑**的 token（高层级表面把
 ### 方式一：从 GitHub 安装（推荐）
 
 ```sh
-dsh plugin --profile <你的 profile> add 'github:<你的用户名>/dsh-yexueqing-skin'
+dsh plugin --profile <你的 profile> add 'github:<Bancott>/dsh-yexueqing-skin'
 ```
 
 Desktop 版 profile 名是 `desktop`，Web 版是 `web`。例如：
