@@ -1,0 +1,65 @@
+{
+  "name": "dsh-yexueqing-skin",
+  "version": "1.0.0",
+  "description": "逆水寒·叶雪青主题 DSH 皮肤：双皮肤变体（春庭藤影／雪霁寒江）、霞鹜文楷GB 字体与国风装饰层",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-skin",
+    "deepseek-harness",
+    "theme",
+    "skin",
+    "逆水寒",
+    "叶雪青",
+    "国风"
+  ],
+  "license": "MIT",
+  "author": "REPLACE-ME (your name)",
+  "type": "module",
+  "icon": "./icon.svg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/REPLACE-ME/dsh-yexueqing-skin.git"
+  },
+  "homepage": "https://github.com/REPLACE-ME/dsh-yexueqing-skin#readme",
+  "bugs": "https://github.com/REPLACE-ME/dsh-yexueqing-skin/issues",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "locale/*.json",
+    "scripts/*.mjs",
+    "assets/*"
+  ],
+  "scripts": {
+    "test": "node scripts/smoke-host.mjs && node scripts/smoke-client.mjs",
+    "test:host": "node scripts/smoke-host.mjs",
+    "test:client": "node scripts/smoke-client.mjs",
+    "subset-font": "node scripts/subset-font.mjs assets/LXGWWenKaiGB-Regular.ttf assets/LXGWWenKaiGB-Regular.subset.ttf"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-theme",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  }
+}

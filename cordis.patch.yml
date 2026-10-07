@@ -1,0 +1,18 @@
+# 叶雪青主题皮肤（Leaf Snow-Green Skin）的 Loader patch 层。
+#
+# 本 bundle 只插入两行：
+#   - yexueqing-skin   本包自己：Host 半（静态素材路由）+ Client 半（皮肤本体）
+# 这一行同时承载两侧：`index.js` 是 Host 半，`client.js` 是浏览器半，
+# 由 package.json 的 `dsh.client` 声明连接。
+#
+# 皮肤不是独立主题 id，而是叠在活动主题之上的 token 覆盖层
+# （ctx.theme.overrideTokens），因此关闭开关时 DSH 完全回到原生外观，
+# 没有任何默认皮肤回归风险。
+- insert:
+    - id: yexueqing-skin
+      name: 'dsh-yexueqing-skin'
+      config:
+        # 素材路由前缀；client.js 的 ASSET_BASE 是同一字面量，改这里要同步改那边。
+        assetBase: '/plugins/yexueqing-skin/assets/'
+        # 关闭时皮肤层完全不注册（等价于卸载），设为 false 可临时停用整个开关。
+        enabled: true

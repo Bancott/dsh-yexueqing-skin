@@ -1,0 +1,18 @@
+# 依赖与构建产物
+node_modules/
+*.tgz
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 字体与立绘的原始全量文件（只随包发布子集化产物）
+assets/LXGWWenKaiGB-Regular.ttf
+*.thumb.webp
+
+# 本地草稿
+.scratch/
