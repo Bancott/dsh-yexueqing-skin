@@ -29,23 +29,11 @@
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
-  "files": [
-    "index.js",
-    "client.js",
-    "cordis.patch.yml",
-    "icon.svg",
-    "README.md",
-    "LICENSE",
-    "locale/*.json",
-    "scripts/*.mjs",
-    "assets/*"
-  ],
   "scripts": {
     "test": "node scripts/smoke-host.mjs && node scripts/smoke-client.mjs",
     "test:host": "node scripts/smoke-host.mjs",
     "test:client": "node scripts/smoke-client.mjs",
-    "subset-font": "node scripts/subset-font.mjs assets/LXGWWenKaiGB-Regular.ttf assets/LXGWWenKaiGB-Regular.subset.ttf",
-    "feather-cutouts": "node scripts/feather-cutouts.mjs 26 assets"
+    "subset-font": "node scripts/subset-font.mjs assets/LXGWWenKaiGB-Regular.ttf assets/LXGWWenKaiGB-Regular.subset.ttf"
   },
   "dsh": {
     "bundle": {
@@ -62,5 +50,14 @@
         "@deepseek-ai/dsh-client-ui-layout"
       ]
     }
-  }
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "locale/*.json",
+    "assets/*"
+  ]
 }

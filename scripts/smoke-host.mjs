@@ -11,7 +11,7 @@
  *
  * 用法: node scripts/smoke-host.mjs
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { brotliDecompressSync } from "node:zlib";
@@ -155,47 +155,36 @@ async function main() {
     !routes.has("/plugins/yexueqing-skin/assets/LXGWWenKaiGB-Regular.subset.woff2"),
   );
 
-  console.log("\n[1b] 画面素材：宽高比必须一致，抠图必须带 alpha");
-  // 三张素材用同一套 background-size:cover + background-position 叠在一起。
-  // 成立的前提**不是像素尺寸相同**，而是**宽高比相同**：cover 会按容器算缩放，
-  // 宽高比一致时两张图在容器里的映射完全一致（缩放与裁切都相同）。
-  // 原图 7664×4304 与抠图 5465×3069 就是这种情况 —— 同一张画的不同分辨率。
-  // 一旦有人替换素材破坏了宽高比，叠加就会错位，所以这里守住它。
+  console.log("\n[1b] 画面素材：两张原图宽高比一致");
+  // 最终版每个皮肤只用一张原图（边饰层），所以不再需要"抠图与原图对齐"
+  // 那组断言。留下的是：两张原图必须同宽高比 —— 它们共用 --yxq-art-position
+  // 一套对位参数，用 background-size:cover 映射到容器；宽高比一致才能保证
+  // 两个变体的取景完全一致（否则切换变体会像"画面跳了一下"）。
   const aspect = (info) => info.width / info.height;
   const aspectClose = (a, b) => Math.abs(aspect(a) - aspect(b)) / aspect(a) < 0.005;
 
-  for (const id of ["spring", "snow"]) {
-    const art = jpegInfo(readFileSync(`${ASSETS_DIR}skin-${id}.jpg`));
-    const scene = pngInfo(readFileSync(`${ASSETS_DIR}scene-${id}.png`));
-    const figure = pngInfo(readFileSync(`${ASSETS_DIR}figure-${id}.png`));
-
-    check(`${id}: 三张素材都解析成功`, art !== null && scene !== null && figure !== null);
-    check(
-      `${id}: 抠图背景与原图宽高比一致（否则叠加会错位）`,
-      aspectClose(scene, art),
-      `art ${aspect(art).toFixed(5)} vs scene ${aspect(scene).toFixed(5)}`,
-    );
-    check(
-      `${id}: 抠人物与原图宽高比一致`,
-      aspectClose(figure, art),
-      `art ${aspect(art).toFixed(5)} vs figure ${aspect(figure).toFixed(5)}`,
-    );
-    check(
-      `${id}: 抠图是 RGBA（colourType=6，alpha 是"不受晕影遮挡"的前提）`,
-      scene?.colourType === 6 && figure?.colourType === 6,
-      `scene=${scene?.colourType} figure=${figure?.colourType}`,
-    );
-  }
+  const springArt = jpegInfo(readFileSync(`${ASSETS_DIR}skin-spring.jpg`));
+  const snowArt = jpegInfo(readFileSync(`${ASSETS_DIR}skin-snow.jpg`));
+  check("两张原图都解析成功", springArt !== null && snowArt !== null);
   check(
     "两个变体的原图宽高比一致（共用一套对位参数）",
-    aspectClose(
-      jpegInfo(readFileSync(`${ASSETS_DIR}skin-spring.jpg`)),
-      jpegInfo(readFileSync(`${ASSETS_DIR}skin-snow.jpg`)),
+    aspectClose(springArt, snowArt),
+    `spring ${aspect(springArt).toFixed(5)} vs snow ${aspect(snowArt).toFixed(5)}`,
+  );
+  check(
+    "原图分辨率足够（长边 ≥ 3840，避免高 DPI 下糊）",
+    springArt.width >= 3840 && snowArt.width >= 3840,
+    `${springArt.width}x${springArt.height}`,
+  );
+  check(
+    "包内不再有抠图素材（最终版回归单图观感）",
+    !["scene-spring.png", "scene-snow.png", "figure-spring.png", "figure-snow.png"].some((n) =>
+      existsSync(`${ASSETS_DIR}${n}`),
     ),
   );
   check(
-    "七个素材路由全部注册（含四张抠图）",
-    [...routes.keys()].filter((p) => p.includes("/assets/")).length === 7,
+    "三个素材路由全部注册（两张原图 + 字体）",
+    [...routes.keys()].filter((p) => p.includes("/assets/")).length === 3,
     [...routes.keys()].join(", "),
   );
   // 不留任何调试/诊断端点：发布版的 Host 半只提供素材。

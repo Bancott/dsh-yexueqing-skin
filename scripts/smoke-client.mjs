@@ -344,11 +344,9 @@ check(
   Object.values(snowLayer.tokens).every((v) => v.light.length > 0 && v.dark.length > 0),
 );
 check(
-  "两个变体各自指向自己的三张画面素材",
-  String(springLayer.tokens["--yxq-figure-image"].light).includes("figure-spring.png") &&
-    String(snowLayer.tokens["--yxq-figure-image"].light).includes("figure-snow.png") &&
-    String(springLayer.tokens["--yxq-scene-image"].light).includes("scene-spring.png") &&
-    String(springLayer.tokens["--yxq-art-image"].light).includes("skin-spring.jpg"),
+  "两个变体各自指向自己的原图",
+  String(springLayer.tokens["--yxq-art-image"].light).includes("skin-spring.jpg") &&
+    String(snowLayer.tokens["--yxq-art-image"].light).includes("skin-snow.jpg"),
 );
 
 console.log("\n[5b] 信息保真：固定 UI 文字不被调淡");
@@ -402,16 +400,19 @@ check(
   springLayer.tokens["--yxq-base-solid"].dark,
 );
 check(
-  "art 开启时下发三张素材 URL",
-  String(springLayer.tokens["--yxq-art-image"].light).includes("skin-spring.jpg") &&
-    String(springLayer.tokens["--yxq-scene-image"].light).includes("scene-spring.png") &&
-    String(springLayer.tokens["--yxq-figure-image"].light).includes("figure-spring.png"),
+  "art 开启时下发原图 URL",
+  String(springLayer.tokens["--yxq-art-image"].light).includes("skin-spring.jpg"),
+  String(springLayer.tokens["--yxq-art-image"].light),
 );
 check(
-  "medium 档下发抠图不透明度与边缘渐入宽度",
-  springLayer.tokens["--yxq-cutout-opacity"].light === "0.78" &&
-    springLayer.tokens["--yxq-cutout-edge"].light === "9%",
-  `${springLayer.tokens["--yxq-cutout-opacity"].light} / ${springLayer.tokens["--yxq-cutout-edge"].light}`,
+  "不再下发任何抠图素材 token（最终版只需一张原图）",
+  springLayer.tokens["--yxq-scene-image"] === undefined &&
+    springLayer.tokens["--yxq-figure-image"] === undefined,
+);
+check(
+  "medium 档下发边饰强度",
+  springLayer.tokens["--yxq-band-opacity"].light === "0.78",
+  springLayer.tokens["--yxq-band-opacity"].light,
 );
 check(
   "medium 档晕影 alpha 由档位算出（不是调色板里的死值）",
@@ -431,14 +432,13 @@ const noArtRun = applyWith(
   JSON.stringify({ enabled: true, skin: "spring", font: "wenkai", art: "off" }),
 );
 check(
-  'art 关闭（字符串 "off"）时三张素材都为 none',
-  ["--yxq-art-image", "--yxq-scene-image", "--yxq-figure-image"].every(
-    (token) => noArtRun.record.overrideTokens[0].tokens[token].light === "none",
-  ),
+  'art 关闭（字符串 "off"）时原图为 none',
+  noArtRun.record.overrideTokens[0].tokens["--yxq-art-image"].light === "none",
+  noArtRun.record.overrideTokens[0].tokens["--yxq-art-image"].light,
 );
 check(
-  "art 关闭时抠图不透明度为 0",
-  noArtRun.record.overrideTokens[0].tokens["--yxq-cutout-opacity"].light === "0",
+  "art 关闭时边饰强度为 0",
+  noArtRun.record.overrideTokens[0].tokens["--yxq-band-opacity"].light === "0",
 );
 check(
   'art 关闭时 bg-base 恢复为不透明 hex（回归防线："off" 是字符串，别被当成真值）',
@@ -452,8 +452,8 @@ const strongRun = applyWith(
 const strongLayer = strongRun.record.overrideTokens[0];
 check(
   "strong 档抠图比 medium 更明显",
-  Number(strongLayer.tokens["--yxq-cutout-opacity"].light) >
-    Number(springLayer.tokens["--yxq-cutout-opacity"].light),
+  Number(strongLayer.tokens["--yxq-band-opacity"].light) >
+    Number(springLayer.tokens["--yxq-band-opacity"].light),
 );
 check(
   "strong 档晕影更薄（原图露得更多）",
@@ -465,7 +465,7 @@ const legacyArtRun = applyWith(
 );
 check(
   "旧版 boolean art:true 平滑迁移到 medium",
-  legacyArtRun.record.overrideTokens[0].tokens["--yxq-cutout-opacity"].light === "0.78",
+  legacyArtRun.record.overrideTokens[0].tokens["--yxq-band-opacity"].light === "0.78",
 );
 
 console.log("\n[8] 关闭开关时零注册");
@@ -535,13 +535,22 @@ check(
   "抠图在负层 z-index:-1（因此位于晕影之上，不被压暗）",
   /body::before\{[^}]*z-index:-1/.test(decorStyles),
 );
+// 最终版回归单图观感：边饰层用的是**原图** + 四边带遮罩，
+// 而不是把抠出的人物贴上去（抠图分层版保留在 git 标签 v1.1.0-cutouts）。
+const bandRule = /body::before\{([^}]*)\}/.exec(decorStyles)?.[1] ?? "";
 check(
-  "抠图层同时铺人物与背景（人物在前）",
-  decorStyles.includes("var(--yxq-figure-image),var(--yxq-scene-image)"),
+  "边饰层用原图 + 四边带遮罩（三条线性渐变并集）",
+  bandRule.includes("background-image:var(--yxq-art-image)") &&
+    (bandRule.match(/linear-gradient\(to (left|right|bottom)/g) ?? []).length >= 3,
+  bandRule.slice(0, 120),
 );
 check(
-  "抠图层不透明度走 --yxq-cutout-opacity",
-  decorStyles.includes("opacity:var(--yxq-cutout-opacity)"),
+  "边饰层不再引用抠图素材",
+  !decorStyles.includes("yxq-figure-image") && !decorStyles.includes("yxq-scene-image"),
+);
+check(
+  "边饰层不透明度走 --yxq-band-opacity",
+  bandRule.includes("opacity:var(--yxq-band-opacity)"),
 );
 check(
   "body 建立堆叠上下文 isolation:isolate（否则负层伪元素落在 body 背景之下）",
@@ -558,12 +567,6 @@ function declaredValue(rule, property) {
   const end = rule.indexOf(";", i);
   return rule.slice(i, end === -1 ? rule.length : end);
 }
-for (const prop of ["mask-image", "-webkit-mask-image"]) {
-  const value = declaredValue(cutoutRule, prop);
-  const ok = DIRS.every((dir) => value.includes(`linear-gradient(to ${dir},transparent 0,#000`));
-  check(`抠图层的 ${prop} 含 4 个方向的边缘渐入`, ok, value.slice(0, 90));
-}
-check("渐入宽度走 --yxq-cutout-edge token", cutoutRule.includes("var(--yxq-cutout-edge)"));
 
 // 回归防线：上一版把画面放进 shell.overlay（内容之上的浮层），直接盖住对话文字。
 check(

@@ -65,19 +65,17 @@
       const WENKAI_STACK = `"${WENKAI_FAMILY}", ${SYSTEM_FONT_STACK}`;
 
       /**
-       * 立绘强度档位。
+       * 画面强度档位。
        *
        *   veilCore/Mid/Edge  晕影在三处的不透明度（对皮肤的 veil 底色取 alpha）。
-       *                      中心最厚（保护正文），四周最薄（露出画面）。
-       *   cutout             抠图层（背景 + 人物）的不透明度。它们在晕影之上，
-       *                      故不被压暗 —— 这正是"抠图比原图更明显"。
-       *   edge               抠图被图片边界切断处的视口方向渐入围。
-       *                      （沿轮廓的渐入在素材侧，见 scripts/feather-cutouts.mjs）
+       *                      中心最厚（护住正文），四周最薄（露出画面）。
+       *   band               边饰层（原图 + 四边带遮罩）的不透明度。
+       *                      它在晕影之上，所以四周的画面是清晰、不被压暗的。
        */
       const ART_STRENGTHS = {
-        soft: { veilCore: "0.92", veilMid: "0.72", veilEdge: "0.40", cutout: "0.55", edge: "6%" },
-        medium: { veilCore: "0.86", veilMid: "0.60", veilEdge: "0.28", cutout: "0.78", edge: "9%" },
-        strong: { veilCore: "0.78", veilMid: "0.48", veilEdge: "0.18", cutout: "0.94", edge: "13%" },
+        soft: { veilCore: "0.92", veilMid: "0.72", veilEdge: "0.40", band: "0.55" },
+        medium: { veilCore: "0.86", veilMid: "0.60", veilEdge: "0.28", band: "0.78" },
+        strong: { veilCore: "0.78", veilMid: "0.48", veilEdge: "0.18", band: "0.94" },
       };
 
       // ══════════════════════════════════════════════════════════════════
@@ -103,11 +101,7 @@
         {
           id: "spring",
           art: "skin-spring.jpg",
-          scene: "scene-spring.png",
-          figure: "figure-spring.png",
           artPosition: "center 22%",
-          scenePosition: "center 22%",
-          figurePosition: "center 22%",
           palette: {
             light: {
               base: "#E9F0EA",
@@ -169,11 +163,7 @@
         {
           id: "snow",
           art: "skin-snow.jpg",
-          scene: "scene-snow.png",
-          figure: "figure-snow.png",
           artPosition: "center 30%",
-          scenePosition: "center 30%",
-          figurePosition: "center 30%",
           palette: {
             light: {
               base: "#E7EDF5",
@@ -480,16 +470,10 @@
         const same = (value) => ({ light: value, dark: value });
 
         tokens["--yxq-art-image"] = same(img(skin.art));
-        tokens["--yxq-scene-image"] = same(img(skin.scene));
-        tokens["--yxq-figure-image"] = same(img(skin.figure));
         tokens["--yxq-art-position"] = same(skin.artPosition);
-        tokens["--yxq-scene-position"] = same(skin.scenePosition);
-        tokens["--yxq-figure-position"] = same(skin.figurePosition);
 
         // 抠图层（背景 + 人物）的不透明度；它们在晕影之上，故不被压暗。
-        tokens["--yxq-cutout-opacity"] = same(level === null ? "0" : level.cutout);
-        // 视口方向的边缘渐入（素材侧已做沿轮廓的 alpha 羽化）。
-        tokens["--yxq-cutout-edge"] = same(level?.edge ?? "9%");
+        tokens["--yxq-band-opacity"] = same(level === null ? "0" : level.band);
 
         // html / body 的**不透明**实底：bg-base 已透明，画布必须另有实底，
         // 否则图片没盖到的地方会透出浏览器 canvas（深色模式下是白色）
@@ -584,22 +568,23 @@ body::after{
   background-repeat:no-repeat,no-repeat,no-repeat;
   background-attachment:fixed,fixed,fixed}
 
-/* 抠图：人物在上、抠出的背景在下；两者都在晕影之上，故不被压暗 */
+/* 边饰：原图经**四边带遮罩**只在画面四周显现，中心留白。
+   这就是 v1.0.0 的观感 —— 一整幅画在边缘自然收进去，而不是贴一个人物上去。
+   三条线性渐变按遮罩默认的 add（并集）合成：右侧一整条 + 上下两条 +
+   左侧极窄一抹；右侧加权是因为两张画的人物都在右边。 */
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background-image:var(--yxq-figure-image),var(--yxq-scene-image);
-  background-repeat:no-repeat,no-repeat;
-  background-size:cover,cover;
-  background-position:var(--yxq-figure-position),var(--yxq-scene-position);
-  opacity:var(--yxq-cutout-opacity);
-  -webkit-mask-image:linear-gradient(to right,transparent 0,#000 var(--yxq-cutout-edge)),
-    linear-gradient(to left,transparent 0,#000 var(--yxq-cutout-edge)),
-    linear-gradient(to bottom,transparent 0,#000 var(--yxq-cutout-edge)),
-    linear-gradient(to top,transparent 0,#000 var(--yxq-cutout-edge));
-  mask-image:linear-gradient(to right,transparent 0,#000 var(--yxq-cutout-edge)),
-    linear-gradient(to left,transparent 0,#000 var(--yxq-cutout-edge)),
-    linear-gradient(to bottom,transparent 0,#000 var(--yxq-cutout-edge)),
-    linear-gradient(to top,transparent 0,#000 var(--yxq-cutout-edge))}
+  background-image:var(--yxq-art-image);
+  background-repeat:no-repeat;
+  background-size:cover;
+  background-position:var(--yxq-art-position);
+  opacity:var(--yxq-band-opacity);
+  -webkit-mask-image:linear-gradient(to left,#000 0%,rgba(0,0,0,0) 32%),
+    linear-gradient(to bottom,#000 0%,rgba(0,0,0,0) 17%,rgba(0,0,0,0) 83%,#000 100%),
+    linear-gradient(to right,rgba(0,0,0,0.40) 0%,rgba(0,0,0,0) 11%);
+  mask-image:linear-gradient(to left,#000 0%,rgba(0,0,0,0) 32%),
+    linear-gradient(to bottom,#000 0%,rgba(0,0,0,0) 17%,rgba(0,0,0,0) 83%,#000 100%),
+    linear-gradient(to right,rgba(0,0,0,0.40) 0%,rgba(0,0,0,0) 11%)}
 
 .yxq-stack{display:flex;flex-direction:column;gap:14px;padding:2px 0 8px}
 .yxq-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:32px}

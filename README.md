@@ -27,14 +27,10 @@ dsh-yexueqing-skin/
 ├── LICENSE / .gitignore / .gitattributes
 ├── README.md
 ├── locale/{zh,en}.json   # 插件卡片标题与描述
-├── scripts/              # smoke-host / smoke-client / subset-font / feather-cutouts
+├── scripts/              # smoke-host / smoke-client / subset-font
 └── assets/
-    ├── skin-spring.jpg             # 春庭藤影 原图（环境氛围底衬）
+    ├── skin-spring.jpg             # 春庭藤影 原图（经四边带遮罩做边饰）
     ├── skin-snow.jpg               # 雪霁寒江 原图
-    ├── scene-spring.png            # 抠出的背景（紫藤 · RGBA）
-    ├── scene-snow.png              # 抠出的背景（雪枝 · RGBA）
-    ├── figure-spring.png           # 抠出的人物（不受晕影遮挡 · RGBA）
-    ├── figure-snow.png             # 抠出的人物
     └── LXGWWenKaiGB-Regular.subset.ttf   # 霞鹜文楷GB（子集化）
 ```
 
@@ -67,6 +63,12 @@ dsh-yexueqing-skin/
 关闭开关时 ①② 都被 disposer 移除，`--dsw-*` 回到 base.css 原值。
 
 ### 2. 画面分层：结构上保证「所有文字都在所有图片之上」
+
+> **最终版是单图边饰。** 每个皮肤只用一个皮肤一个原图，经**四边带遮罩**在画面
+> 四周显现（中心留白），这正是第一版（`v1.0.0`）的观感。曾经做过的
+> **边饰分层版**（抠出背景 + 人物、alpha 羽化、置于晕影之上）完整保留在
+> git 标签 **`v1.1.0-cutouts`**，需要时可以取回；它的问题是把人物硬贴上去，
+> 观感不如整幅画自然收边。
 
 需求有硬性优先级：**任何文字都必须压在图片之上**。这决定了画面**不能**放在
 `shell.overlay` —— 那个 slot 的定义就是"位于所有列之上"，放进去必然盖住正文
@@ -104,11 +106,11 @@ dsh-yexueqing-skin/
 | `scene-<id>.png` | 抠出的重要背景（紫藤 / 雪枝） | 在晕影**之上**，不被压暗 |
 | `figure-<id>.png` | 抠出的人物 | 在晕影**之上**，不被压暗 |
 
-这就是「抠出来的部分要比原图更明显」的实现：**原图被晕影压暗，抠图不受影响**。
+这就是「抠出来的部分要比原图更明显」的实现：**原图被晕影压暗，边饰不受影响**。
 
 **边缘渐入由素材侧的 alpha 羽化实现**，不是 CSS。
 
-抠图的硬边是沿着**不规则轮廓**走的。CSS 的 `mask-image` 只能用线性/径向渐变，
+边饰的硬边是沿着**不规则轮廓**走的。CSS 的 `mask-image` 只能用线性/径向渐变，
 它羽化的是**视口边缘**，跟轮廓毫无关系；`filter: blur()` 又会把人物本身一起
 糊掉。唯一能沿着真实轮廓羽化的做法，就是让 PNG 自己的 alpha 在轮廓处渐变：
 
@@ -120,22 +122,22 @@ npm run feather-cutouts      # 用 pngjs 对 alpha 通道做两趟盒式模糊�
 覆盖并留 `.orig` 备份，**幂等性有限**（多次运行会越来越软），所以只跑一次然后
 把结果提交进仓库。
 
-`html::before` 另外还有一圈**视口方向**的四向遮罩：抠图被图片边界切断的地方
+`html::before` 另外还有一圈**视口方向**的四向遮罩：边饰被图片边界切断的地方
 （比如紫藤伸到画面左缘）需要它来柔化，与素材羽化互补。
 
-**抠图必须带 alpha 通道**：四张都是 RGBA PNG（真实透明通道，不是颜色近似），
+**边饰必须带 alpha 通道**：四张都是 RGBA PNG（真实透明通道，不是颜色近似），
 所以人物能整片压在晕影之上而不带白边。host 侧有一条断言守着
 `colourType === 6`。
 
 > **素材对齐的实际前提是宽高比一致，不是像素尺寸相同。**
-> 原图 7664×4304 与抠图 5465×3069 就是同一张画的不同分辨率（比值
+> 原图 7664×4304 与边饰 5465×3069 就是同一张画的不同分辨率（比值
 > 1.78067 vs 1.78071）。因为三张都用 `background-size: cover` + 同一套
 > `background-position`，宽高比一致时它们在容器里的映射完全相同。
 > 替换素材时若破坏宽高比就会错位 —— host 测试里有断言守着这一条。
 
 强度档位在皮肤页可实时切换：
 
-| 档 | 晕影中心 | 晕影中段 | 晕影四周 | 抠图 | 视口渐入 |
+| 档 | 晕影中心 | 晕影中段 | 晕影四周 | 边饰 | 视口渐入 |
 |---|---|---|---|---|---|
 | 弱 | 0.90 | 0.68 | 0.34 | 0.50 | 6% |
 | 中（默认） | 0.84 | 0.56 | 0.24 | 0.72 | 9% |
@@ -210,7 +212,7 @@ npm run feather-cutouts      # 用 pngjs 对 alpha 通道做两趟盒式模糊�
   `--yxq-art-image` / `--yxq-art-position`、`--yxq-base-solid`、
   `--yxq-scene-image` / `--yxq-scene-position`、
   `--yxq-figure-image` / `--yxq-figure-position`、
-  `--yxq-cutout-opacity` / `--yxq-cutout-edge`、`--yxq-art-veil-{edge,mid,core}`。
+  `--yxq-band-opacity` / `--yxq-band-edge`、`--yxq-art-veil-{edge,mid,core}`。
   它们走同一覆盖层，因此也自动跟随明暗与开关。
 
 ### 6. 字体
@@ -231,7 +233,7 @@ npm run feather-cutouts      # 用 pngjs 对 alpha 通道做两趟盒式模糊�
 - **输入框焦点态**：`input / textarea / select / [contenteditable]:focus-visible`
   上淡金色描边 + 柔和外环，即国风细线感。
 - **画面三层**：`html` 背景（底色 + 原图）、`html::after`（晕影）、
-  `html::before`（抠图），全部在负 z-index 层（见第 2 节）。
+  `html::before`（边饰），全部在负 z-index 层（见第 2 节）。
 - **面板描边**：`--dsw-alias-border-l1..l4`、`--dsw-alias-settings-card-stroke`
   与可重绑的 `--dsw-elevation-stroke-color` 一起把面板/卡片描边染成主题色。
 - **插件自身面板**：皮肤卡片底边一条主题色渐变发丝线、选中态的淡金描边 + 外发光。
@@ -395,10 +397,10 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
      `ASSET_SPECS` 逐项探测，缺文件只是不注册那条路由），
      但 `SKINS` 里的 `scene` / `figure` 字段仍会拼出 URL 并 404 ——
      如需彻底干净，把 `ART_STRENGTHS` 的默认档改成 `off`。
-   - 只删抠图（保留 `skin-*.jpg`）→ 退化成"单一原图 + 晕影"，仍然可用。
+   - 只删边饰（保留 `skin-*.jpg`）→ 退化成"单一原图 + 晕影"，仍然可用。
 5. 字体已按 SIL OFL 1.1 随包分发子集，`LICENSE` 里已附声明。
 6. 仓库体积约 28 MB。GitHub 单文件上限 100 MB、仓库建议 <1 GB，均无问题；
-   但若想压到 10 MB 以内，把四张抠图降到 2732px 后再提交。
+   但若想压到 10 MB 以内，把四张边饰降到 2732px 后再提交。
 
 ---
 
@@ -437,7 +439,7 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
    `"skin.moon.name"`、`"skin.moon.desc"`。
 
 3. 三张素材放进 `assets/`，并加进 `index.js` 的 `ASSET_SPECS`。
-   抠图必须保留 alpha 通道（RGBA PNG），且与原图**同尺寸同构图**。
+   边饰必须保留 alpha 通道（RGBA PNG），且与原图**同尺寸同构图**。
 
 皮肤页的卡片列表、持久化校验、变体切换都会自动带上新皮肤。
 
@@ -485,16 +487,16 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
   （`border-l1..l4`、`settings-card-stroke`、`elevation-stroke-color`）
   与插件自身面板上；在没有钩子前不去覆盖宿主元素的 `background-image`，
   否则会盖掉组件自己的背景。
-- **素材体积 28 MB**（两张原图 + 四张 5465×3069 抠图 + 字体）。抠图在界面上
+- **素材体积 28 MB**（两张原图 + 四张 5465×3069 边饰 + 字体）。边饰在界面上
   最多铺到视口宽度，降到 2732px 可再省约 3/4 体积且肉眼无差。本仓库刻意
   **不引入会改动美术素材的隐式构建步骤** —— 想要更小体积请自行降采样后替换，
   文件名不变，`index.js` 的 `ASSET_SPECS` 无需改动。
-- 抠图**必须保留 alpha 通道**。若替换成不透明图，人物会变成一块方图压住界面 ——
+- 边饰**必须保留 alpha 通道**。若替换成不透明图，人物会变成一块方图压住界面 ——
   这是这套方案唯一不可省的素材要求。
 - 字体已子集化到 3.62 MB（`npm run subset-font` 可重新生成），并经 brotli
   压缩到约 1.89 MB 传输。若日后要做 WOFF2，`@font-face` 的 `src` 已按
   `woff2 → ttf` 顺序声明，把 `.subset.woff2` 放进 `assets/` 即可自动优先。
 - 互斥的第二级会**改写用户的插件开关状态**（虽然可逆）。若用户不希望任何
   自动改动，关掉「独占皮肤」开关即可，此时仍保留第一级的 token 栈顶互斥。
-- 边缘渐入宽度（`edge`）对两张立绘是同一个值。若将来某张抠图的硬边特别窄，
+- 边缘渐入宽度（`edge`）对两张立绘是同一个值。若将来某张边饰的硬边特别窄，
   把 `edge` 做成**每皮肤**字段即可，机制无需改动。
