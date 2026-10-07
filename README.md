@@ -234,11 +234,13 @@ dsh-yexueqing-skin/
   面板边框随主题色）
 - **刻意不覆盖**：`--dsw-alias-label-secondary`、`--dsw-alias-state-idle-primary`
   （见第 3 节信息保真）
+- **注册表之外的细层级**（见第 5b 节）：`--dsw-alias-label-tertiary` /
+  `-label-caption` / `-label-primary-dimmed` / `-button-elevated-fill` /
+  `-interactive-bg-hover`
 - **插件自有装饰 token**：`--yxq-accent`、`--yxq-accent-soft`、
   `--yxq-art-image` / `--yxq-art-position`、`--yxq-base-solid`、
-  `--yxq-scene-image` / `--yxq-scene-position`、
-  `--yxq-figure-image` / `--yxq-figure-position`、
-  `--yxq-band-opacity` / `--yxq-band-edge`、`--yxq-art-veil-{edge,mid,core}`。
+  `--yxq-band-opacity`、`--yxq-art-veil-{edge,mid,core}`、
+  `--yxq-rail-{mark,active,preview}`。
   它们走同一覆盖层，因此也自动跟随明暗与开关。
 
 ### 5b. 注册表之外的 token（本插件最实用的一处发现）
@@ -397,29 +399,59 @@ ui-theme 文档化了若干**局部重绑**的 token（高层级表面把
 
 包名：**`dsh-yexueqing-skin`**（bundle + Web Client 插件，无需构建步骤，装上即用）
 
-### 方式一：从 GitHub 安装（推荐）
+命令形式是 `dsh plugin --profile <profile> add '<spec>'`：`plugin` 后面除 DSH 自己的
+子命令（`allow-version` 等）外**全部原样转发给 pnpm**，所以 `add` 的写法与 pnpm 一致。
+可用的 `<spec>` 形式：
+
+| 形式 | 例子 |
+|---|---|
+| GitHub 简写 | `github:Bancott/dsh-yexueqing-skin` |
+| 仓库 URL | `https://github.com/Bancott/dsh-yexueqing-skin` |
+| npm 包名 | `dsh-yexueqing-skin` |
+| 本地绝对路径 | `D:\皮肤插件\dsh-yexueqing-skin`（**必须绝对路径**） |
+| tarball | `https://…/dsh-yexueqing-skin-1.0.0.tgz` |
+
+### 方式一：命令行安装
+
+**Web / TUI 等 profile**：用你 PATH 上的 `dsh` 即可。
 
 ```sh
-dsh plugin --profile <你的 profile> add 'github:<Bancott>/dsh-yexueqing-skin'
+dsh plugin --profile web add 'github:Bancott/dsh-yexueqing-skin'
 ```
 
-Desktop 版 profile 名是 `desktop`，Web 版是 `web`。例如：
+**Desktop** —— 注意这里有个坑：**PATH 上的独立 `dsh` 不能管理 `desktop` profile**，
+它会直接报错：
 
-```sh
-dsh plugin --profile desktop add 'github:yourname/dsh-yexueqing-skin'
+```
+error: profile "desktop" is managed exclusively by the Electron application
 ```
 
-安装后确认它进入了 profile 的 `dsh.profile.bundles`：
+Desktop 的 profile 由 Electron 应用独占管理，必须用 **Desktop 自带的 CLI**
+（它带着 `manageDesktopProfile` 权限，见 `resources/runtime/cli/bin/dsh.cmd`）：
 
-```sh
-dsh --profile desktop --dump-config | grep -A2 dsh-yexueqing-skin
+```powershell
+# 默认安装路径；换过安装位置就替换成你自己的
+& "D:\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add 'github:Bancott/dsh-yexueqing-skin'
+```
+
+> **跑之前先完全退出 DSH。** Desktop 独占管理它的 profile，运行中会占用它；
+> 另外该 profile 必须已经被初始化过（也就是至少正常打开过一次 Desktop）。
+
+Windows 上请用 **PowerShell**（单引号有效）。`cmd.exe` 不识别单引号，
+把 `'...'` 的引号去掉即可。
+
+确认装上了（`list` 同样是转发给 pnpm）：
+
+```powershell
+& "D:\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop list
 ```
 
 然后**完全退出并重新打开** DSH（Web 版在运行 DSH 的终端按 Ctrl+C 再 `dsh web`）。
 
-### 方式二：让 DSH 里的 agent 装本地目录
+### 方式二：让 DSH 里的 agent 安装（Desktop 最省事）
 
-适合改源码迭代（`link:` 依赖，改完刷新页面即生效）：
+适合改源码迭代，也是 Desktop 上最不容易踩坑的路径（`install_bundle` 走的是
+DSH 自己的安装通道，不受上面那条 profile 独占限制）：
 
 ```
 action: install_bundle
@@ -435,6 +467,8 @@ target: <本仓库的绝对路径>
 registry: https://registry.npmjs.org
 ```
 
+这是本地目录安装，会写成 `link:` 依赖 —— 改完源码刷新页面即生效，**不用重装**。
+
 ### 方式三：皮肤市场
 
 装了 [dshmarket](https://github.com/deepseek-ai/deepseek-harness) 后，在
@@ -442,14 +476,21 @@ registry: https://registry.npmjs.org
 
 ### 卸载
 
-```sh
-dsh plugin --profile desktop remove dsh-yexueqing-skin
+```powershell
+# Desktop
+& "D:\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop remove dsh-yexueqing-skin
+# Web / TUI
+dsh plugin --profile web remove dsh-yexueqing-skin
 ```
 
-卸载会把依赖与 bundle 选择一并摘除。皮肤自身的偏好存在浏览器
-`localStorage`（键 `dsh-yexueqing-skin.state`），不写任何 profile 文件；
-如需彻底清理，在浏览器控制台执行
-`localStorage.removeItem("dsh-yexueqing-skin.state")`。
+卸载会把依赖与 bundle 选择一并摘除。皮肤自身的偏好存在浏览器 `localStorage`，
+**不写任何 profile 文件**；如需彻底清理，在浏览器控制台执行：
+
+```js
+localStorage.removeItem("dsh-yexueqing-skin.state.v2")
+```
+
+（或者直接在「设置 → 叶雪青主题」页点「恢复默认」。）
 
 ### 本插件的可调项
 
@@ -460,28 +501,24 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
 | `assetBase` | `/plugins/yexueqing-skin/assets/` | 素材路由前缀；改动须与 `client.js` 的 `ASSET_BASE` 同步 |
 | `enabled` | `true` | 设为 `false` 时 Host 半不注册任何素材路由 |
 
-其余偏好都在「设置 → 叶雪青」页里。
-
----
+其余偏好都在「设置 → 叶雪青主题」页里。
 
 ## 发布前清单（维护者）
 
-以下几处是仓库里的占位符，发布前必须替换：
+当前仓库里的作者与仓库地址都已填好（`Bancott`）。只有 **fork 之后改名**才需要动：
 
-1. `package.json` → `author`、`repository.url`、`homepage`、`bugs`
-   里的 `REPLACE-ME`，换成你的名字与 GitHub 用户名/仓库名。
-2. `LICENSE` → `Copyright (c) 2026 REPLACE-ME`。
-3. `README.md` → 「方式一」示例里的 `<你的用户名>`。
-4. **素材授权（重要）**：`assets/` 下六张图都是《逆水寒》叶雪青素材，
-   版权归原作方。公开分发前请确认授权。不便随仓库分发时的降级方式：
-   - 删掉全部六张 → 插件优雅降级为**纯配色皮肤**（`index.js` 的
-     `ASSET_SPECS` 逐项探测，缺文件只是不注册那条路由），
-     但 `SKINS` 里的 `scene` / `figure` 字段仍会拼出 URL 并 404 ——
-     如需彻底干净，把 `ART_STRENGTHS` 的默认档改成 `off`。
-   - 只删边饰（保留 `skin-*.jpg`）→ 退化成"单一原图 + 晕影"，仍然可用。
+1. `package.json` → `author`、`repository.url`、`homepage`、`bugs`。
+2. `LICENSE` → `Copyright (c) 2026 <你的名字>`。
+3. `README.md` → 安装命令里的 `github:Bancott/dsh-yexueqing-skin`。
+4. **素材授权（重要）**：`assets/` 下两张图是《逆水寒》叶雪青素材，
+   版权归原作方。公开分发前请确认授权。不便随仓库分发时，**直接删掉
+   `assets/skin-*.jpg` 即可优雅降级为纯配色皮肤** —— `index.js` 的
+   `ASSET_SPECS` 逐项探测文件是否存在，缺文件只是不注册那条路由，
+   画面层拿到 `--yxq-art-image: none` 后自然什么都不画，不会报错。
 5. 字体已按 SIL OFL 1.1 随包分发子集，`LICENSE` 里已附声明。
-6. 仓库体积约 28 MB。GitHub 单文件上限 100 MB、仓库建议 <1 GB，均无问题；
-   但若想压到 10 MB 以内，把四张边饰降到 2732px 后再提交。
+6. 仓库体积约 **10 MB**（两张原图 6.4 MB + 字体 3.6 MB）。GitHub 单文件上限
+   100 MB、仓库建议 <1 GB，均无问题。想再小就把两张原图降到 2732px —— 注意
+   **两张必须降到同一宽高比**，否则切换变体会错位（host 测试有断言守着）。
 
 ---
 
@@ -494,12 +531,8 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
    ```js
    {
      id: "moon",
-     art: "skin-moon.jpg",            // 原图：环境氛围底衬
-     scene: "scene-moon.png",         // 抠出的背景（RGBA）
-     figure: "figure-moon.png",       // 抠出的人物（RGBA，不受晕影遮挡）
-     artPosition: "center 25%",
-     scenePosition: "center 25%",     // 三张同尺寸同构图，对位一致
-     figurePosition: "center 25%",
+     art: "skin-moon.jpg",        // 唯一素材：原图，经四边带遮罩做边饰
+     artPosition: "center 25%",   // 取景；两个变体共用一套对位参数
      palette: {
        light: { /* 与现有皮肤同名的语义 key，全部必填 */ },
        dark:  { /* … */ },
@@ -507,13 +540,20 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
    }
    ```
 
-   语义 key 清单见 `TOKEN_MAP` 与 `DECOR_TOKEN_MAP`（`base` `layer1` `layer2`
-   `overlay` `sidebarFill` `border1..4` `cardFill` `cardStroke` `brand`
-   `textPrimary` `error` `success` `warn` `focusRing` `scrollThumb`
-   `scrollThumbHover` `selection` `switchThumb` `accent` `accentSoft`
-   `elevationStroke`，以及晕影三层 `veilEdge` `veilMid` `veilCore`）。
+   语义 key 分三组，全部必填：
 
-   > 注意 `textSecondary` 与 `idle` **刻意不在表里** —— 它们是"次要/未激活"
+   - **结构 / 强调**（`TOKEN_MAP` + `DECOR_TOKEN_MAP`）：`base` `layer1`
+     `layer2` `overlay` `sidebarFill` `border1..4` `cardFill` `cardStroke`
+     `brand` `textPrimary` `error` `success` `warn` `focusRing`
+     `scrollThumb` `scrollThumbHover` `selection` `switchThumb` `accent`
+     `accentSoft` `elevationStroke`
+   - **注册表之外的细层级**（`EXTRA_TOKEN_MAP`，见第 5b 节）：`textTertiary`
+     `textCaption` `textDimmed` `buttonElevated` `hoverFill`
+   - **本插件自己的 token**：`veil`（晕影底色，用
+     `python scripts/sample-veil.py <图片>` 采样）、`railMark` `railActive`
+     `railPreview`（右侧对话定位横线三档）
+
+   > `textSecondary` 与 `idle` **刻意不在表里** —— 它们是"次要 / 未激活"
    > 层级，覆盖就等于把固定 UI 调淡（见第 3 节）。
 
 2. **`client.js` → locale 字典**（`zh` 与 `en` 两份）各加两条：
