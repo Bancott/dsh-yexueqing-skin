@@ -537,7 +537,7 @@
         tokens["--yxq-art-image"] = same(img(skin.art));
         tokens["--yxq-art-position"] = same(skin.artPosition);
 
-        // 抠图层（背景 + 人物）的不透明度；它们在晕影之上，故不被压暗。
+        // 边饰层（原图 + 四边带遮罩）的不透明度；它在晕影之上，故四周不被压暗。
         tokens["--yxq-band-opacity"] = same(level === null ? "0" : level.band);
 
         // html / body 的**不透明**实底：bg-base 已透明，画布必须另有实底，
@@ -614,7 +614,7 @@
    画面若挂在 body 自己的 background-image 上，就依赖"body 的背景不被
    任何更高优先级的规则覆盖"。实测里这种依赖不可靠（ui-theme 注入的
    head CSS 就动过 body 的背景）。所以原图与晕影一起放进 body::after
-   （同一元素的两个背景层），抠图放进 body::before —— 两者都是 body
+   （同一元素的两个背景层），边饰放进 body::before —— 两者都是 body
    堆叠上下文里的**负层子盒**，按规范必然绘制在 body 背景之上、全部
    内容之下。body 的背景只留一个不透明底色兜底。 */
 
@@ -1003,7 +1003,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,
                   "section.fontWenkai": "霞鹜文楷GB",
                   "section.fontSystem": "默认字体",
                   "section.artLevel": "画面强度",
-                  "section.artLevelHint": "原图被压暗做底衬，抠图压在其上因此更醒目",
+                  "section.artLevelHint": "原图被晕影压暗做底衬，边饰压在晕影之上，因此四周更醒目",
                   "section.artOff": "关闭",
                   "section.artSoft": "弱",
                   "section.artMedium": "中",
@@ -1035,7 +1035,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,
                   "section.fontSystem": "Default font",
                   "section.artLevel": "Artwork strength",
                   "section.artLevelHint":
-                    "The original is dimmed as a backdrop, so the cut-outs on top stand out",
+                    "The original is dimmed by the veil as a backdrop, while the edge band sits above it, so the frame stays vivid",
                   "section.artOff": "Off",
                   "section.artSoft": "Soft",
                   "section.artMedium": "Medium",

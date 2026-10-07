@@ -516,7 +516,8 @@ localStorage.removeItem("dsh-yexueqing-skin.state.v2")
    `ASSET_SPECS` 逐项探测文件是否存在，缺文件只是不注册那条路由，
    画面层拿到 `--yxq-art-image: none` 后自然什么都不画，不会报错。
 5. 字体已按 SIL OFL 1.1 随包分发子集，`LICENSE` 里已附声明。
-6. 仓库体积约 **10 MB**（两张原图 6.4 MB + 字体 3.6 MB）。GitHub 单文件上限
+6. **截图**：`screenshots.json` + `screenshots/`（3 张，市场详情页按 App Store 风格展示）。换图只需替换同名文件，**不用再提 PR**。注意展示图里不要出现你的会话名或用户名。
+7. 仓库体积约 **10.5 MB**（两张原图 6.4 MB + 字体 3.6 MB + 截图 0.5 MB）。GitHub 单文件上限
    100 MB、仓库建议 <1 GB，均无问题。想再小就把两张原图降到 2732px —— 注意
    **两张必须降到同一宽高比**，否则切换变体会错位（host 测试有断言守着）。
 
