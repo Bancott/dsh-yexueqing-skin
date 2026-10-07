@@ -21,18 +21,21 @@
 dsh-yexueqing-skin/
 ├── package.json          # bundle + client 清单（dsh.bundle / dsh.client）
 ├── cordis.patch.yml      # Loader patch：插入 yexueqing-skin 一行
-├── index.js              # Host 半：静态素材路由（立绘 + 字体）
+├── index.js              # Host 半：静态素材路由（画面素材 + 字体）
 ├── client.js             # Client 半：皮肤本体（ModuleLoader bundle）
 ├── icon.svg              # 插件卡片图标（package.json 的顶层 icon）
+├── LICENSE / .gitignore / .gitattributes
 ├── README.md
-├── locale/
-│   ├── zh.json           # 插件卡片标题与描述（中文）
-│   └── en.json
+├── locale/{zh,en}.json   # 插件卡片标题与描述
+├── scripts/              # smoke-host / smoke-client / subset-font / feather-cutouts
 └── assets/
-    ├── skin-spring.jpg               # 春庭藤影 立绘
-    ├── skin-snow.jpg                 # 雪霁寒江 立绘
-    ├── LXGWWenKaiGB-Regular.ttf      # 霞鹜文楷GB
-    └── skin-*.thumb.webp             # 可选：皮肤页卡片缩略图（缺失时回退原图）
+    ├── skin-spring.jpg             # 春庭藤影 原图（环境氛围底衬）
+    ├── skin-snow.jpg               # 雪霁寒江 原图
+    ├── scene-spring.png            # 抠出的背景（紫藤 · RGBA）
+    ├── scene-snow.png              # 抠出的背景（雪枝 · RGBA）
+    ├── figure-spring.png           # 抠出的人物（不受晕影遮挡 · RGBA）
+    ├── figure-snow.png             # 抠出的人物
+    └── LXGWWenKaiGB-Regular.subset.ttf   # 霞鹜文楷GB（子集化）
 ```
 
 两半的分工是硬边界，不是风格选择：
@@ -57,13 +60,112 @@ dsh-yexueqing-skin/
 │     同一 source 重复调用 = 该层整体替换并重新压到栈顶（互斥就靠这个）。
 │
 └─ ② 装饰样式表   decorCss(skin, state)
-      字体 @font-face、选区 / 滚动条 / 焦点态，以及 shell.overlay 装饰层的样式。
-      样式表随皮肤变体整体替换，因此不会残留上一个变体的规则。
+│     字体 @font-face、选区 / 滚动条 / 焦点态，以及 html 上的画面三层样式。
+│     样式表随皮肤变体整体替换，因此不会残留上一个变体的规则。
 ```
 
 关闭开关时 ①② 都被 disposer 移除，`--dsw-*` 回到 base.css 原值。
 
-### 2. 互斥怎么实现：重压栈，而不是 `!important`
+### 2. 画面分层：结构上保证「所有文字都在所有图片之上」
+
+需求有硬性优先级：**任何文字都必须压在图片之上**。这决定了画面**不能**放在
+`shell.overlay` —— 那个 slot 的定义就是"位于所有列之上"，放进去必然盖住正文
+（上一版正是这个错误，实测对话内容被人物遮住）。
+
+现在画面挂在 `html` 上，靠 CSS 绘制顺序拿到保证：
+
+| 绘制顺序（自下而上） | 内容 |
+|---|---|
+| `html` 背景 | 不透明底色 + 原图 |
+| `html::after`（`z-index:-2`） | 晕影：压暗原图，让正文与画面拉开对比 |
+| `html::before`（`z-index:-1`） | 抠出的背景 + 抠出的人物 |
+| `html` 的正常流内容 | 应用外壳与**全部文字** |
+
+**为什么这样就成立**：`z-index` 为负的伪元素绘制在「父元素背景之上、全部
+正常流内容之下」。所以"文字在图片之上"是绘制顺序决定的，与不透明度调参无关。
+
+**为什么 `--dsw-alias-bg-base` 与 `--dsw-specific-sidebar-fill` 都必须置为 `transparent`**：应用的
+`.frame`、`.centerCol`、会话根 `Dc7zOa_root`、各页面都用它铺满视口。
+只要它不透明，画面就被整片挡住。必须是 `transparent` 而**不能是半透明**——
+那些容器是嵌套的，半透明会逐层叠加（`0.85³ ≈ 99.7%` 不透），画面在最里层
+直接消失；而 `transparent` 与 `transparent` 复合仍是 `transparent`，
+**与嵌套深度无关**。
+
+代价是工具卡这类同样用 `bg-base` 的小容器也会变透。它们的文字仍在画面之上，
+可读性由晕影负责。而真正承载文字的**卡片、气泡、弹窗**用的是
+`bg-layer-*` / `settings-card-fill` / `bg-overlay` —— 这些**保持不透明**，
+所以正文区永远有一块干净的底。
+
+三张画面素材构成分层，都是同尺寸同构图因此对位一致：
+
+| 素材 | 角色 | 与晕影的关系 |
+|---|---|---|
+| `skin-<id>.jpg` | 原图铺满，环境氛围 | 在晕影**之下**，被压暗 |
+| `scene-<id>.png` | 抠出的重要背景（紫藤 / 雪枝） | 在晕影**之上**，不被压暗 |
+| `figure-<id>.png` | 抠出的人物 | 在晕影**之上**，不被压暗 |
+
+这就是「抠出来的部分要比原图更明显」的实现：**原图被晕影压暗，抠图不受影响**。
+
+**边缘渐入由素材侧的 alpha 羽化实现**，不是 CSS。
+
+抠图的硬边是沿着**不规则轮廓**走的。CSS 的 `mask-image` 只能用线性/径向渐变，
+它羽化的是**视口边缘**，跟轮廓毫无关系；`filter: blur()` 又会把人物本身一起
+糊掉。唯一能沿着真实轮廓羽化的做法，就是让 PNG 自己的 alpha 在轮廓处渐变：
+
+```sh
+npm run feather-cutouts      # 用 pngjs 对 alpha 通道做两趟盒式模糊（≈高斯）
+```
+
+半径 26 **源**像素（源图 5465px 宽 → 屏幕上约 9px 的柔和过渡）。脚本会就地
+覆盖并留 `.orig` 备份，**幂等性有限**（多次运行会越来越软），所以只跑一次然后
+把结果提交进仓库。
+
+`html::before` 另外还有一圈**视口方向**的四向遮罩：抠图被图片边界切断的地方
+（比如紫藤伸到画面左缘）需要它来柔化，与素材羽化互补。
+
+**抠图必须带 alpha 通道**：四张都是 RGBA PNG（真实透明通道，不是颜色近似），
+所以人物能整片压在晕影之上而不带白边。host 侧有一条断言守着
+`colourType === 6`。
+
+> **素材对齐的实际前提是宽高比一致，不是像素尺寸相同。**
+> 原图 7664×4304 与抠图 5465×3069 就是同一张画的不同分辨率（比值
+> 1.78067 vs 1.78071）。因为三张都用 `background-size: cover` + 同一套
+> `background-position`，宽高比一致时它们在容器里的映射完全相同。
+> 替换素材时若破坏宽高比就会错位 —— host 测试里有断言守着这一条。
+
+强度档位在皮肤页可实时切换：
+
+| 档 | 晕影中心 | 晕影中段 | 晕影四周 | 抠图 | 视口渐入 |
+|---|---|---|---|---|---|
+| 弱 | 0.90 | 0.68 | 0.34 | 0.50 | 6% |
+| 中（默认） | 0.84 | 0.56 | 0.24 | 0.72 | 9% |
+| 强 | 0.76 | 0.44 | 0.16 | 0.90 | 13% |
+
+晕影的**颜色**取自皮肤调色板的 `veil`，**alpha** 由档位决定 ——
+所以"画面强度"是一个旋钮，而"什么颜色"是皮肤自己的事。
+
+### 3. 信息保真：固定 UI 文字不跟着皮肤变淡
+
+需求：权限、模型、账号、标签、轮数、上下文占用、输入框这类"固定 UI"
+要保持原样，方便一眼扫到关键信息（只有字体要换 —— 字体走 `--dsw-font-family`，
+与本条无关）。
+
+**做法一：不覆盖表达"次要"的 token。** 下面两个 token 正是 DSH 用来表达
+次要 / 未激活的层级，覆盖它们必然等于"主动调淡"：
+
+```
+--dsw-alias-label-secondary      次要文字（标签、元信息、提示）
+--dsw-alias-state-idle-primary   未激活状态
+```
+
+它们被显式列进 `INFO_FIDELITY_TOKENS` 并**排除**在覆盖层外，让 base.css
+原值生效，对比度即为原生水平。测试里有一条断言禁止它们滑回覆盖层。
+
+**做法二：其余被覆盖的颜色，暗色下一律不比原生更暗。** 例如
+`--dsw-alias-label-primary` 的暗色值是 `#F2F8F5`，比 DSH 默认的 `#E1E5EE`
+更亮；边框与状态色同理。因此不存在"用了皮肤之后某个文字变淡"的情形。
+
+### 4. 互斥怎么实现：重压栈，而不是 `!important`
 
 需求是「用我们的皮肤时其他皮肤失效，关掉后回退到默认」。实现方式是
 `overrideTokens` 自带的一条语义：
@@ -92,40 +194,44 @@ dsh-yexueqing-skin/
 `outline` 上，那是组件属性，不涉及 token，测试里有明确断言禁止自定义属性
 使用 `!important`。）
 
-### 3. 覆盖的 token
+### 5. 覆盖的 token
 
-- **Theme 巡检要求「必须同时提供 light 与 dark」的 14 个别名 token**：
-  `bg-base` / `bg-layer-1` / `bg-layer-2` / `bg-overlay` / `border-l1` / `border-l2` /
-  `brand-primary` / `label-primary` / `label-secondary` / `state-{error,idle,success,warn}-primary` /
-  `specific-sidebar-fill`
-- **基础样式表实际消费的延伸别名**：`border-l3` / `border-l4` /
+- **别名 token**：`bg-base` / `bg-layer-1` / `bg-layer-2` / `bg-overlay` /
+  `border-l1..l4` / `brand-primary` / `label-primary` /
+  `state-{error,success,warn}-primary` / `specific-sidebar-fill`
+- **基础样式表实际消费的延伸别名**：
   `settings-card-fill` / `settings-card-stroke` / `focus-ring-color` /
   `dsh-scrollbar-thumb(-hover)` / `bg-document-selection` / `switch-thumb`
 - **受支持的重绑点**：`--dsw-elevation-stroke-color`（高层级表面的发丝描边 →
   面板边框随主题色）
-- **插件自有装饰 token**：`--yxq-accent`（淡金/藕粉）、`--yxq-accent-soft`、
-  `--yxq-motif-color`、`--yxq-motif-opacity`、`--yxq-art-veil`、`--yxq-art-image`、
-  `--yxq-art-position`、`--yxq-art-wash-opacity`、`--yxq-art-band-opacity`。
+- **刻意不覆盖**：`--dsw-alias-label-secondary`、`--dsw-alias-state-idle-primary`
+  （见第 3 节信息保真）
+- **插件自有装饰 token**：`--yxq-accent`、`--yxq-accent-soft`、
+  `--yxq-art-image` / `--yxq-art-position`、`--yxq-base-solid`、
+  `--yxq-scene-image` / `--yxq-scene-position`、
+  `--yxq-figure-image` / `--yxq-figure-position`、
+  `--yxq-cutout-opacity` / `--yxq-cutout-edge`、`--yxq-art-veil-{edge,mid,core}`。
   它们走同一覆盖层，因此也自动跟随明暗与开关。
 
-### 4. 字体
+### 6. 字体
 
 字体通过 `--dsw-font-family` 这一个 token 切换：
 
 - 开关为「霞鹜文楷GB」时，覆盖层里放入
   `"LXGW WenKai GB", <原生系统字体栈>`；
-- 开关为「默认字体」时，该 token **从覆盖层与权威表里整个消失**，
+- 开关为「默认字体」时，该 token **从覆盖层里整个消失**，
   base.css 的原生 UI 字体栈自动生效 —— 这就是"切回默认字体"，不需要二次覆盖。
 
 `--dsw-font-family-brand` 派生自 `var(--dsw-font-family)`，因此品牌文字同样跟随。
+换字体**不影响**第 3 节的信息保真：字号与颜色都不动。
 
-### 5. 装饰
+### 7. 装饰
 
 - **选区 / 滚动条**：主题色系线性渐变（`::selection`、`::-webkit-scrollbar-thumb`）。
 - **输入框焦点态**：`input / textarea / select / [contenteditable]:focus-visible`
   上淡金色描边 + 柔和外环，即国风细线感。
-- **装饰层**：注册进 `shell.overlay` 的一个 `pointer-events:none` 固定层，
-  内含**整屏薄纱**与**四边带**两层立绘（见第 6 节）。
+- **画面三层**：`html` 背景（底色 + 原图）、`html::after`（晕影）、
+  `html::before`（抠图），全部在负 z-index 层（见第 2 节）。
 - **面板描边**：`--dsw-alias-border-l1..l4`、`--dsw-alias-settings-card-stroke`
   与可重绑的 `--dsw-elevation-stroke-color` 一起把面板/卡片描边染成主题色。
 - **插件自身面板**：皮肤卡片底边一条主题色渐变发丝线、选中态的淡金描边 + 外发光。
@@ -140,70 +246,69 @@ DSH 升版最多让装饰退化，不会让界面坏掉。
 国风线条需求改由 token 描边 + 焦点态线条 + 卡片发丝线承担。
 如果日后想重新引入纹样，**不要做成整帧重复贴图**——那必然读成周期性图案。
 
-### 6. 立绘为什么必须渲染在 `shell.overlay`，以及两层结构
+### 8. 踩过的坑（都有测试断言守着）
 
-这是实测出来的约束，不是风格选择。
+**坑 1 · 画面放进 `shell.overlay` → 盖住对话文字。**
+`shell.overlay` 是「位于所有列之上」的浮层。放进去必然压住正文，这个位置
+**永远**无法满足「文字在图片之上」。
 
-**(a) 为什么不能在 `body` 背景上。** ui-layout 的全屏框架容器是
-`.frame{background:var(--dsw-alias-bg-base);height:100%}`，它盖在整个 `body`
-之上。挂在 `body` 背景上的图案**会被它整片盖住**——第一版就是这么写的，
-实测只有字体生效、立绘和纹样完全看不见。
+**坑 2 · 画面挂在 `html` 上 → 被 ui-theme 注入的 body 背景色整片盖住。**
+ui-theme 的 Host 半会注入 `body{background-color:#151517}`。而 `html` 的负
+z-index 伪元素落在**根堆叠上下文**的负层 —— 那是在 body 背景**之下**，
+同样被盖住。所以画面必须挂在 `body` 上，且 `body` 要建立堆叠上下文
+（`isolation:isolate`），负层子盒才会正确地落在 body 背景之上、内容之下。
 
-**(b) 为什么不能把 `--dsw-alias-bg-base` 改成半透明。** 全仓有 **12 处**
-组件把这个 token 当背景用（工具卡 `LqhxcW_card`、会话根 `Dc7zOa_root`、
-侧栏 `qWvkEq_root`、文档预览、日程页……）。一旦它带 alpha，嵌套容器会
-叠加出多层薄纱，卡片里的文字直接糊掉。
+**坑 3 · 只把 `--dsw-alias-bg-base` 改透明 → 画面依然全黑。**
+最难找的一个。**Windows 标题栏模式下，全屏框架 `.frame` 的背景是用
+`--dsw-specific-sidebar-fill` 画的，不是 `--dsw-alias-bg-base`。** 只改
+bg-base，`.frame` 仍然是不透明的皮肤色（实测 `#111B18`），把画面整片挡住
+—— 等于自己的 token 覆盖层挡住了自己的画面。
+⇒ 开启画面时**两个 token 都要透明**。测试里有断言守着这一条。
 
-所以立绘只能走**内容之上的浮层**，并靠遮罩保证正文可读。两层结构：
+**坑 4 · 遮罩/晕影的径向渐变半径超过视口 → 该露的地方全被压住。**
+曾用 `radial-gradient(120% 100% at 50% 45%, ...)` 做遮罩，椭圆半径是视口的
+120%×100%，于是「透明区」覆盖几乎整屏。**同样的错误在晕影上又犯了一次**：
+`radial-gradient(120% 95% ...)` 让「四周最薄」那一档的 alpha 根本取不到，
+整屏都压在 0.56~0.67。写径向渐变时务必按视口尺寸验算停止点的可达性。
 
-| 层 | token | 作用 |
-|---|---|---|
-| `__wash` | `--yxq-art-wash-opacity` | 整屏极淡，给界面染上画面的气氛 |
-| `__band` | `--yxq-art-band-opacity` | 四边带 + 右侧加权，真正让人看见立绘 |
+**坑 5 · 纹样做成整帧重复贴图 → 读成「一片时钟」。** 已整体删除。
 
-四边带用 `ART_BAND_MASK`：三条**线性**渐变按 CSS 遮罩默认的 `add`（并集）
-合成 —— 右边一整条 + 上下两条 + 左边极窄一抹，中心完全透明。
-右侧加权是刻意的：两张立绘的人物都在右侧，左侧是文字密集的侧栏。
+**坑 6 · 用 `!important` 抢 token 优先级 → 压平局部重绑。**
+ui-theme 文档化了若干**局部重绑**的 token（高层级表面把
+`--dsh-scrollbar-thumb(-hover)` 重绑为 l2、菜单材质重绑
+`--dsw-elevation-stroke-color`）。全量 `!important` 会把它们一并压平，
+破坏菜单与浮层的材质。改用重压栈（第 4 节）。
 
-> **踩过的坑（写在这里防止回退）**：第一版遮罩用的是
-> `radial-gradient(120% 100% at 50% 45%, ...)`。椭圆半径是视口的
-> 120%×100%，于是"透明区"覆盖了几乎整屏，立绘被整片遮掉 ——
-> 这就是「立绘还是没有显示」的直接原因。矩形带没有这个问题，
-> 测试里有一条断言专门禁止径向遮罩回归。
+**坑 7 · 把「次要 / 未激活」token 一起覆盖 → 固定 UI 变淡。** 见第 3 节。
 
-强度档位（`ART_STRENGTHS`）：`off` / `soft`(0.08,0.34) /
-`medium`(0.12,0.50) / `strong`(0.18,0.68)，在皮肤页可实时切换。
+**坑 8 · 改状态形状时不换存储键 → 旧值被迁移成「关闭」。**
+`art` 曾是 boolean，`readState` 把 `art: false` 迁移成 `"off"`，于是画面
+永远不显示，而**从界面上很难联想到是历史设置导致的**。现在 `STORAGE_KEY`
+带版本号（`.v2`）—— **每次改状态形状都要递增它**。
 
-层本身 `pointer-events:none`（`shell.overlay` 本身也是点击穿透的），
-并以 `order: -100` 排在 overlay 里所有其他条目的**下面**，
-这样对话框、toast 等浮层仍然盖在皮肤之上。
+#### 排查纯视觉问题的方法（值得留着）
 
-### 7. 互斥：两级机制
+浏览器端没有可用的自动化读取通道；而 Host 半的模块在进程内被缓存，
+改代码后**不重启就不会重新 import**（实测：同一个 `apply` 里新加的路由
+不生效，而旧路由照常工作）。所以「画面不显示」这类问题靠猜会绕很久。
 
-需求是「启用本皮肤时其他皮肤失效，关掉后回退默认界面」，且不改别人的项目。
+有效做法：让 **Client 半把浏览器里算出的状态 POST 到一个独立的 loopback
+端口**（`Content-Type: text/plain` + `mode: "no-cors"` 构成 CORS 简单请求，
+不触发预检，请求必定送达），由一个临时 Node 服务落盘。关键采样项：
 
-**第一级 · token 栈顶**（对所有走主题体系的皮肤有效）
-本层在 `theme/change` 后重压一次，始终待在覆盖栈顶（第 2 节）。
+- `getComputedStyle(document.body, "::after")` —— 伪元素有没有生成、背景是什么；
+- **全 DOM 扫描「面积 > 半屏且背景不透明」的元素** —— 一眼定位盖住画面的元凶；
+- 关键元素上各 token 的**实际取值**（`getPropertyValue`），以及
+  `computedStyle` 的结果 —— 两者不一致就说明有更近的祖先或更高优先级的规则；
+- 用 `new Image()` 探素材能否加载（看 `naturalWidth`）——比 resource timing 可靠，
+  自定义 scheme（`dsh-app://`）的资源不一定进 resource timing。
 
-**第二级 · 自动停用**（对绕过 token 体系、自带 DOM/样式表的皮肤有效）
-开启皮肤时，通过
-`ctx.remote.pluginManager.setPluginEnabled(entryId, false)`
-自动关闭检测到的其他皮肤插件 —— 这正是 DSH 官方 Web UI 在「插件」页
-切换开关时走的**同一条** Remote（`dsh-client-ui-plugin-manager` 的
-`lib/client.js` 就这么调）。因此不写 profile 文件、也不需要审批。
+坑 3 就是这么在一步之内定位的（`--dsw-alias-bg-base` 是 `transparent`，但
+`.frame` 的 computed `background-color` 恰好等于 `--dsw-specific-sidebar-fill`）。
 
-- 识别规则：只匹配 `/skin|皮肤/i`，**刻意不匹配 `theme`** ——
-  主题类插件（如官方首页主题）与本皮肤无 token 冲突，宁可少关不可误关。
-- 双重自我排除：包名精确匹配，或 `entryId` 命中我们的行 id。
-- **可逆**：被关掉的 `entryId` 记在状态里，关闭皮肤或关闭「独占皮肤」开关时
-  逐一恢复。整个过程不碰别人仓库里的任何文件。
-- 没有 Remote 的部署（无 Web 载体）静默跳过，皮肤本身照常工作。
-
-已确认现状：`@leon___/dsh-client-liang-intensity-skin`（滑动变祖）本身就是
-`enabled: false`；`dsh-official-homepage-theme` 只作用于首页 canvas，
-不注册主题、不覆盖 token、不碰 `document.body`，与本皮肤无冲突。
-
----
+诊断代码必须**缺任何一个 API 就整体跳过** —— 它绝不允许影响皮肤本身
+（曾经因为沙箱没有 `setTimeout` 而把整条测试跑崩）。发布前删干净，
+`scripts/smoke-host.mjs` 里有断言禁止残留诊断路由。
 
 ## 安装
 
@@ -284,26 +389,34 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
    里的 `REPLACE-ME`，换成你的名字与 GitHub 用户名/仓库名。
 2. `LICENSE` → `Copyright (c) 2026 REPLACE-ME`。
 3. `README.md` → 「方式一」示例里的 `<你的用户名>`。
-4. **立绘授权**：`assets/skin-spring.jpg`、`assets/skin-snow.jpg` 是《逆水寒》
-   素材，版权归原作方。公开分发前请确认授权；不便随仓库分发就删掉这两张图——
-   插件在素材缺失时会优雅降级为纯配色皮肤（`index.js` 的 `ASSET_SPECS`
-   逐项探测，缺文件只是不注册那条路由）。
+4. **素材授权（重要）**：`assets/` 下六张图都是《逆水寒》叶雪青素材，
+   版权归原作方。公开分发前请确认授权。不便随仓库分发时的降级方式：
+   - 删掉全部六张 → 插件优雅降级为**纯配色皮肤**（`index.js` 的
+     `ASSET_SPECS` 逐项探测，缺文件只是不注册那条路由），
+     但 `SKINS` 里的 `scene` / `figure` 字段仍会拼出 URL 并 404 ——
+     如需彻底干净，把 `ART_STRENGTHS` 的默认档改成 `off`。
+   - 只删抠图（保留 `skin-*.jpg`）→ 退化成"单一原图 + 晕影"，仍然可用。
 5. 字体已按 SIL OFL 1.1 随包分发子集，`LICENSE` 里已附声明。
+6. 仓库体积约 28 MB。GitHub 单文件上限 100 MB、仓库建议 <1 GB，均无问题；
+   但若想压到 10 MB 以内，把四张抠图降到 2732px 后再提交。
 
 ---
 
 ## 新增一个皮肤
 
-两步，不需要碰机制代码：
+三步，不需要碰机制代码：
 
 1. **`client.js` → `SKINS` 数组**加一项：
 
    ```js
    {
      id: "moon",
-     art: "skin-moon.jpg",
-     thumb: "skin-moon.thumb.webp",     // 可选
+     art: "skin-moon.jpg",            // 原图：环境氛围底衬
+     scene: "scene-moon.png",         // 抠出的背景（RGBA）
+     figure: "figure-moon.png",       // 抠出的人物（RGBA，不受晕影遮挡）
      artPosition: "center 25%",
+     scenePosition: "center 25%",     // 三张同尺寸同构图，对位一致
+     figurePosition: "center 25%",
      palette: {
        light: { /* 与现有皮肤同名的语义 key，全部必填 */ },
        dark:  { /* … */ },
@@ -311,16 +424,20 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
    }
    ```
 
-   语义 key 清单见 `TOKEN_MAP` 与 `DECOR_TOKEN_MAP`
-   （`base` `layer1` `layer2` `overlay` `sidebarFill` `border1..4` `cardFill`
-   `cardStroke` `brand` `textPrimary` `textSecondary` `error` `idle` `success`
-   `warn` `focusRing` `scrollThumb` `scrollThumbHover` `selection` `switchThumb`
-   `accent` `accentSoft` `elevationStroke` `motifColor` `motifOpacity` `artVeil`）。
+   语义 key 清单见 `TOKEN_MAP` 与 `DECOR_TOKEN_MAP`（`base` `layer1` `layer2`
+   `overlay` `sidebarFill` `border1..4` `cardFill` `cardStroke` `brand`
+   `textPrimary` `error` `success` `warn` `focusRing` `scrollThumb`
+   `scrollThumbHover` `selection` `switchThumb` `accent` `accentSoft`
+   `elevationStroke`，以及晕影三层 `veilEdge` `veilMid` `veilCore`）。
+
+   > 注意 `textSecondary` 与 `idle` **刻意不在表里** —— 它们是"次要/未激活"
+   > 层级，覆盖就等于把固定 UI 调淡（见第 3 节）。
 
 2. **`client.js` → locale 字典**（`zh` 与 `en` 两份）各加两条：
    `"skin.moon.name"`、`"skin.moon.desc"`。
 
-3. 立绘放进 `assets/`，并加进 `index.js` 的 `ASSET_SPECS`。
+3. 三张素材放进 `assets/`，并加进 `index.js` 的 `ASSET_SPECS`。
+   抠图必须保留 alpha 通道（RGBA PNG），且与原图**同尺寸同构图**。
 
 皮肤页的卡片列表、持久化校验、变体切换都会自动带上新皮肤。
 
@@ -356,21 +473,28 @@ dsh plugin --profile desktop remove dsh-yexueqing-skin
 
 ## 已知限制与后续
 
-- **立绘在内容之上**，这是 `shell.overlay` 路线的固有代价：DSH 的应用根容器
-  铺满视口且不透明，而后者的 `--dsw-alias-bg-base` 又被 12 处组件当背景用，
-  不能改成半透明。所以立绘只能浮在内容上方，靠四边带遮罩保护正文。
-  想让立绘真正"压在内容下面"，需要一个明确留给插件的画布背景钩子。
-- **宿主面板内部直接叠纹样**同样缺钩子。目前装饰落在 token 描边
+- **`bg-base` 透明会让工具卡之类的小容器也变透**。这是"画面能被看见"的必要
+  代价：那些容器与全屏框架共用同一个 token，无法按尺寸区分。承载正文的卡片、
+  气泡、弹窗用的是另外几个 token，仍然不透明，所以正文区始终有干净的底。
+  如果某类卡片观感不佳，是调整晕影强度（档位）而不是改回不透明。
+- **画面靠 `z-index` 负值的伪元素**，因此依赖"应用根容器不建立会截断负层级的
+  堆叠上下文"这一前提。当前 ui-layout 的 `.frame` 只有 `position:relative`
+  而没有 `z-index`，成立；若将来 DSH 给根容器加了 `z-index` 或
+  `isolation:isolate`，画面会被压到看不见（表现为"皮肤只剩配色"）。
+- **宿主面板内部直接叠纹样**缺钩子。目前装饰落在 token 描边
   （`border-l1..l4`、`settings-card-stroke`、`elevation-stroke-color`）
   与插件自身面板上；在没有钩子前不去覆盖宿主元素的 `background-image`，
   否则会盖掉组件自己的背景。
+- **素材体积 28 MB**（两张原图 + 四张 5465×3069 抠图 + 字体）。抠图在界面上
+  最多铺到视口宽度，降到 2732px 可再省约 3/4 体积且肉眼无差。本仓库刻意
+  **不引入会改动美术素材的隐式构建步骤** —— 想要更小体积请自行降采样后替换，
+  文件名不变，`index.js` 的 `ASSET_SPECS` 无需改动。
+- 抠图**必须保留 alpha 通道**。若替换成不透明图，人物会变成一块方图压住界面 ——
+  这是这套方案唯一不可省的素材要求。
 - 字体已子集化到 3.62 MB（`npm run subset-font` 可重新生成），并经 brotli
   压缩到约 1.89 MB 传输。若日后要做 WOFF2，`@font-face` 的 `src` 已按
   `woff2 → ttf` 顺序声明，把 `.subset.woff2` 放进 `assets/` 即可自动优先。
-- 皮肤页卡片目前直接用原始立绘，3 MB 级 JPEG 对首屏偏重；
-  `assets/skin-*.thumb.webp` 已接好回退链路（`<img>` 的 `onError` 换 `src`），
-  生成缩略图即可改善。
 - 互斥的第二级会**改写用户的插件开关状态**（虽然可逆）。若用户不希望任何
   自动改动，关掉「独占皮肤」开关即可，此时仍保留第一级的 token 栈顶互斥。
-- 立绘目前固定右侧加权（两张立绘的人物都在右侧）。若将来加入人物在左的
-  立绘，需要把 `ART_BAND_MASK` 的加权方向也做成皮肤字段。
+- 边缘渐入宽度（`edge`）对两张立绘是同一个值。若将来某张抠图的硬边特别窄，
+  把 `edge` 做成**每皮肤**字段即可，机制无需改动。

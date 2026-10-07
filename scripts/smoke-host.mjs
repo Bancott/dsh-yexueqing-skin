@@ -107,6 +107,44 @@ const FONT_PATH = "/plugins/yexueqing-skin/assets/LXGWWenKaiGB-Regular.subset.tt
 const SPRING_PATH = "/plugins/yexueqing-skin/assets/skin-spring.jpg";
 const fontOnDisk = readFileSync(fileURLToPath(new URL("../assets/LXGWWenKaiGB-Regular.subset.ttf", import.meta.url)));
 
+const ASSETS_DIR = fileURLToPath(new URL("../assets/", import.meta.url));
+
+/** 从 PNG 的 IHDR 读宽高与 colour type（24=colourType 字节）。 */
+function pngInfo(buffer) {
+  const isPng = buffer.subarray(0, 8).toString("hex") === "89504e470d0a1a0a";
+  if (!isPng) return null;
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+    colourType: buffer[25], // 6 = RGBA（必须，抠图靠 alpha 通道）
+  };
+}
+
+/** 从 JPEG 的 SOFn 段读宽高。 */
+function jpegInfo(buffer) {
+  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  let i = 2;
+  while (i < buffer.length) {
+    if (buffer[i] !== 0xff) {
+      i++;
+      continue;
+    }
+    const marker = buffer[i + 1];
+    // SOF0/1/2/3/5/6/7/9/10/11/13/14/15 段含尺寸
+    const isSof =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+    if (isSof) {
+      return { height: buffer.readUInt16BE(i + 5), width: buffer.readUInt16BE(i + 7) };
+    }
+    const length = buffer.readUInt16BE(i + 2);
+    i += 2 + length;
+  }
+  return null;
+}
+
 async function main() {
   console.log("\n[1] 路由集合");
   check("立绘 spring 已注册", routes.has(SPRING_PATH));
@@ -116,7 +154,56 @@ async function main() {
     "缺失的 woff2 未注册",
     !routes.has("/plugins/yexueqing-skin/assets/LXGWWenKaiGB-Regular.subset.woff2"),
   );
-  check("缺失的缩略图未注册", !routes.has("/plugins/yexueqing-skin/assets/skin-spring.thumb.webp"));
+
+  console.log("\n[1b] 画面素材：宽高比必须一致，抠图必须带 alpha");
+  // 三张素材用同一套 background-size:cover + background-position 叠在一起。
+  // 成立的前提**不是像素尺寸相同**，而是**宽高比相同**：cover 会按容器算缩放，
+  // 宽高比一致时两张图在容器里的映射完全一致（缩放与裁切都相同）。
+  // 原图 7664×4304 与抠图 5465×3069 就是这种情况 —— 同一张画的不同分辨率。
+  // 一旦有人替换素材破坏了宽高比，叠加就会错位，所以这里守住它。
+  const aspect = (info) => info.width / info.height;
+  const aspectClose = (a, b) => Math.abs(aspect(a) - aspect(b)) / aspect(a) < 0.005;
+
+  for (const id of ["spring", "snow"]) {
+    const art = jpegInfo(readFileSync(`${ASSETS_DIR}skin-${id}.jpg`));
+    const scene = pngInfo(readFileSync(`${ASSETS_DIR}scene-${id}.png`));
+    const figure = pngInfo(readFileSync(`${ASSETS_DIR}figure-${id}.png`));
+
+    check(`${id}: 三张素材都解析成功`, art !== null && scene !== null && figure !== null);
+    check(
+      `${id}: 抠图背景与原图宽高比一致（否则叠加会错位）`,
+      aspectClose(scene, art),
+      `art ${aspect(art).toFixed(5)} vs scene ${aspect(scene).toFixed(5)}`,
+    );
+    check(
+      `${id}: 抠人物与原图宽高比一致`,
+      aspectClose(figure, art),
+      `art ${aspect(art).toFixed(5)} vs figure ${aspect(figure).toFixed(5)}`,
+    );
+    check(
+      `${id}: 抠图是 RGBA（colourType=6，alpha 是"不受晕影遮挡"的前提）`,
+      scene?.colourType === 6 && figure?.colourType === 6,
+      `scene=${scene?.colourType} figure=${figure?.colourType}`,
+    );
+  }
+  check(
+    "两个变体的原图宽高比一致（共用一套对位参数）",
+    aspectClose(
+      jpegInfo(readFileSync(`${ASSETS_DIR}skin-spring.jpg`)),
+      jpegInfo(readFileSync(`${ASSETS_DIR}skin-snow.jpg`)),
+    ),
+  );
+  check(
+    "七个素材路由全部注册（含四张抠图）",
+    [...routes.keys()].filter((p) => p.includes("/assets/")).length === 7,
+    [...routes.keys()].join(", "),
+  );
+  // 不留任何调试/诊断端点：发布版的 Host 半只提供素材。
+  check(
+    "没有残留的诊断/调试路由",
+    ![...routes.keys()].some((p) => /diag|debug|probe/i.test(p)),
+    [...routes.keys()].join(", "),
+  );
 
   console.log("\n[2] 字体：identity 表示");
   {

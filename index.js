@@ -29,8 +29,16 @@ const DEFAULT_ASSET_BASE = "/plugins/yexueqing-skin/assets/";
 /**
  * 素材表：文件名 -> MIME 类型。
  *
- * 每一项都是可选的：文件不存在时该条目不注册，浏览器侧的 `@font-face`
- * 与背景层按声明顺序回退，而不是让整个插件激活失败。
+ * 每一项都是可选的：文件不存在时该条目不注册，浏览器侧按声明顺序回退，
+ * 而不是让整个插件激活失败。因此删掉任意一张图都能优雅降级。
+ *
+ * 每个皮肤三张画面素材，构成"背景画面 + 前景抠图"的分层：
+ *   skin-<id>.jpg      原图铺满，负责环境氛围（上面的层会把它压暗）
+ *   scene-<id>.png     抠出的重要背景（紫藤 / 花枝）
+ *   figure-<id>.png    抠出的人物，**不受晕影遮挡**，边缘自带渐入
+ *
+ * 抠图是 RGBA PNG —— 真实透明通道，不是靠颜色近似，
+ * 因此人物可以完整压在晕影之上而不带白边。
  *
  * 字体说明：随包发布的是**子集化**后的
  * `LXGWWenKaiGB-Regular.subset.ttf`（24.6 MB -> 3.62 MB，见
@@ -41,11 +49,14 @@ const DEFAULT_ASSET_BASE = "/plugins/yexueqing-skin/assets/";
 const ASSET_SPECS = [
   ["skin-spring.jpg", "image/jpeg"],
   ["skin-snow.jpg", "image/jpeg"],
-  ["skin-spring.thumb.webp", "image/webp"],
-  ["skin-snow.thumb.webp", "image/webp"],
+  ["scene-spring.png", "image/png"],
+  ["scene-snow.png", "image/png"],
+  ["figure-spring.png", "image/png"],
+  ["figure-snow.png", "image/png"],
   ["LXGWWenKaiGB-Regular.subset.woff2", "font/woff2"],
   ["LXGWWenKaiGB-Regular.subset.ttf", "font/ttf"],
 ];
+
 
 /** 写出一个无 body 的响应。 */
 function send(res, status, headers = {}) {
@@ -317,6 +328,7 @@ export function apply(ctx, config) {
     const disposers = [...assets.keys()].map((path) =>
       ctx.webServer.register({ kind: "exact", path, handler }),
     );
+
 
     return () => {
       for (const dispose of disposers) dispose();

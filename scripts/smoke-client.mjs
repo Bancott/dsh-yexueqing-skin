@@ -29,6 +29,13 @@ const CLIENT_SOURCE = readFileSync(
   "utf8",
 );
 
+/**
+ * 从 Client 源码里抽出真正的存储键。
+ * 硬编码键名会在改版时静默失效（夹具写旧键 → 客户端读新键 → 所有用例
+ * 退化成默认状态，看起来像功能坏了）。这里直接对齐源码，杜绝漂移。
+ */
+const STORAGE_KEY = /const STORAGE_KEY = "([^"]+)"/.exec(CLIENT_SOURCE)[1];
+
 let failures = 0;
 function check(name, condition, detail = "") {
   if (condition) {
@@ -90,7 +97,7 @@ function createDocument() {
 function bootBundle({ persisted = null } = {}) {
   const document = createDocument();
   const storage = new Map();
-  if (persisted !== null) storage.set("dsh-yexueqing-skin.state", persisted);
+  if (persisted !== null) storage.set(STORAGE_KEY, persisted);
 
   const window = {
     __ModuleLoader__: { load: (definition) => (window.__captured = definition) },
@@ -228,12 +235,20 @@ const REQUIRED_ALIAS_TOKENS = [
   "--dsw-alias-border-l2",
   "--dsw-alias-brand-primary",
   "--dsw-alias-label-primary",
-  "--dsw-alias-label-secondary",
   "--dsw-alias-state-error-primary",
-  "--dsw-alias-state-idle-primary",
   "--dsw-alias-state-success-primary",
   "--dsw-alias-state-warn-primary",
   "--dsw-specific-sidebar-fill",
+];
+
+/**
+ * 信息保真：这两个 token 是 DSH 表达"次要 / 未激活"的层级，覆盖它们必然
+ * 等于把权限、模型、标签这类高频检索目标调淡。需求是"固定 UI 文字不要变淡"，
+ * 所以必须留给 base.css 原值 —— 这条断言禁止它们重新滑回覆盖层。
+ */
+const FORBIDDEN_TOKENS = [
+  "--dsw-alias-label-secondary",
+  "--dsw-alias-state-idle-primary",
 ];
 
 console.log("\n[1] bundle 形态");
@@ -245,6 +260,13 @@ check("执行 bundle 不写 localStorage", boot.storage.size === 0);
 
 console.log("\n[2] 插件导出形式");
 const springRun = applyWith(null);
+// 持久化键必须带版本号：旧形状（art 曾是 boolean）里一个 art:false 会被
+// 迁移成 "off"，画面永远不显示，且从界面上很难联想到是历史设置导致的。
+check(
+  "STORAGE_KEY 带版本号（作废历史状态，避免旧 art:false 被迁移成 off）",
+  /dsh-yexueqing-skin\.state\.v\d+/.test(STORAGE_KEY),
+  STORAGE_KEY,
+);
 check("inject 是数组", Array.isArray(springRun.plugin.inject));
 check(
   "inject 声明 slots / theme / locale",
@@ -262,20 +284,17 @@ check(
   "注册了 settings.section（皮肤页）",
   springRun.record.injects.includes("settings.section"),
 );
+// 画面不再占用任何 slot —— 它挂在 html 的背景与负 z-index 伪元素上，
+// 结构上位于全部内容之下。占用 slot 必然盖住文字（上一版的错误）。
 check(
-  "注册了 shell.overlay（装饰层，在所有列之上）",
-  springRun.record.injects.includes("shell.overlay"),
+  "没有占用内容之上的 slot（shell.overlay / sidebar / main / root）",
+  !["shell.overlay", "sidebar", "main", "root"].some((k) =>
+    springRun.record.injects.includes(k),
+  ),
+  springRun.record.injects.join(", "),
 );
-check("三个 slot 各注册一个条目", springRun.record.register.length === 3,
+check("两个 slot 各注册一个条目", springRun.record.register.length === 2,
   `得到 ${springRun.record.register.length}`);
-const decor = springRun.record.register.find((r) => r.options.name === "shell.overlay");
-check("装饰层 id 正确", decor?.options.id === "yexueqing-decor");
-check(
-  "装饰层 order 为负（排在对话框等浮层之下）",
-  typeof decor?.options.order === "number" && decor.options.order < 0,
-  `order=${decor?.options.order}`,
-);
-check("装饰层是 React 组件", typeof decor?.Component === "function");
 const section = springRun.record.register.find((r) => r.options.name === "settings.section");
 check("皮肤页 id/order 正确", section?.options.id === "yexueqing" && section?.options.order === 41);
 check("皮肤页 label 是 thunk（跟随语言切换）", typeof section?.options.label === "function");
@@ -303,11 +322,16 @@ check(
 );
 
 console.log("\n[5] 两个变体各自成层，且调色板 key 一致");
-const snowRun = applyWith(JSON.stringify({ enabled: true, skin: "snow", font: "wenkai", art: true, motif: true }));
+const snowRun = applyWith(JSON.stringify({ enabled: true, skin: "snow", font: "wenkai", art: "medium" }));
 const snowLayer = snowRun.record.overrideTokens[0];
-check("雪霁变体的 bg-base 与春庭不同",
-  snowLayer.tokens["--dsw-alias-bg-base"].light !== springLayer.tokens["--dsw-alias-bg-base"].light,
-  `${snowLayer.tokens["--dsw-alias-bg-base"].light} vs ${springLayer.tokens["--dsw-alias-bg-base"].light}`);
+// 注意：不能用 bg-base 比较 —— 立绘开启时它被刻意置为 transparent（两个变体相同）。
+// 用画布实底与抬升表面比较，它们才是承载皮肤配色的地方。
+check("雪霁变体的画布实底与春庭不同",
+  snowLayer.tokens["--yxq-base-solid"].light !== springLayer.tokens["--yxq-base-solid"].light,
+  `${snowLayer.tokens["--yxq-base-solid"].light} vs ${springLayer.tokens["--yxq-base-solid"].light}`);
+check("雪霁变体的抬升表面与春庭不同",
+  snowLayer.tokens["--dsw-alias-bg-layer-1"].light !==
+    springLayer.tokens["--dsw-alias-bg-layer-1"].light);
 check("雪霁变体的 brand 与春庭不同",
   snowLayer.tokens["--dsw-alias-brand-primary"].dark !== springLayer.tokens["--dsw-alias-brand-primary"].dark);
 check(
@@ -319,6 +343,27 @@ check(
   "每个 token 的 light/dark 都不为空",
   Object.values(snowLayer.tokens).every((v) => v.light.length > 0 && v.dark.length > 0),
 );
+check(
+  "两个变体各自指向自己的三张画面素材",
+  String(springLayer.tokens["--yxq-figure-image"].light).includes("figure-spring.png") &&
+    String(snowLayer.tokens["--yxq-figure-image"].light).includes("figure-snow.png") &&
+    String(springLayer.tokens["--yxq-scene-image"].light).includes("scene-spring.png") &&
+    String(springLayer.tokens["--yxq-art-image"].light).includes("skin-spring.jpg"),
+);
+
+console.log("\n[5b] 信息保真：固定 UI 文字不被调淡");
+for (const token of FORBIDDEN_TOKENS) {
+  check(
+    `没有覆盖 ${token}（留给 base.css 原值）`,
+    springLayer.tokens[token] === undefined,
+    JSON.stringify(springLayer.tokens[token]),
+  );
+}
+check(
+  "暗色主文字比 DSH 默认更亮（#fff 级别的对比）",
+  springLayer.tokens["--dsw-alias-label-primary"].dark.toLowerCase() > "#e0e0e0",
+  springLayer.tokens["--dsw-alias-label-primary"].dark,
+);
 
 console.log("\n[6] 字体开关");
 check(
@@ -327,72 +372,105 @@ check(
     springLayer.tokens["--dsw-font-family"].light.includes("LXGW WenKai GB"),
 );
 const systemFontRun = applyWith(
-  JSON.stringify({ enabled: true, skin: "spring", font: "system", art: true, motif: true }),
+  JSON.stringify({ enabled: true, skin: "spring", font: "system", art: "medium" }),
 );
 check(
   "system 时**不下发** --dsw-font-family（回到 base.css 原生字体栈）",
   systemFontRun.record.overrideTokens[0].tokens["--dsw-font-family"] === undefined,
 );
 
-console.log("\n[7] 立绘开关与画布安全");
+console.log("\n[7] 立绘开关、画布安全与「文字在图片之上」的机制");
+// bg-base 透明是"画面能被看见"的前提：应用的大块容器全用它铺满。
 check(
-  "art 开启时 bg-base 仍是 6 位 hex（不透明，防止画布透白）",
-  /^#[0-9a-f]{6}$/i.test(springLayer.tokens["--dsw-alias-bg-base"].light),
+  "art 开启时 bg-base = transparent（否则画面被应用容器整片挡住）",
+  springLayer.tokens["--dsw-alias-bg-base"].light === "transparent" &&
+    springLayer.tokens["--dsw-alias-bg-base"].dark === "transparent",
   springLayer.tokens["--dsw-alias-bg-base"].light,
 );
+// 透明是嵌套安全的：transparent 与 transparent 复合仍是 transparent。
+// 半透明会逐层叠加（0.85³ ≈ 99.7% 不透），画布在最里层直接消失。
 check(
-  "art 开启时抬升表面转成 rgba",
-  springLayer.tokens["--dsw-alias-bg-layer-1"].light.startsWith("rgba("),
-  springLayer.tokens["--dsw-alias-bg-layer-1"].light,
+  "抬升表面保持不透明（承载文字的卡片要干净底）",
+  /^#[0-9a-f]{6}$/i.test(springLayer.tokens["--dsw-alias-bg-layer-1"].light) &&
+    /^#[0-9a-f]{6}$/i.test(springLayer.tokens["--dsw-alias-bg-layer-2"].light),
+  `${springLayer.tokens["--dsw-alias-bg-layer-1"].light} / ${springLayer.tokens["--dsw-alias-bg-layer-2"].light}`,
 );
 check(
-  "art 开启时下发立绘 URL",
-  String(springLayer.tokens["--yxq-art-image"].light).includes("skin-spring.jpg"),
+  "画布另有不透明实底 --yxq-base-solid（bg-base 透明后防 canvas 透白）",
+  /^#[0-9a-f]{6}$/i.test(springLayer.tokens["--yxq-base-solid"].light) &&
+    /^#[0-9a-f]{6}$/i.test(springLayer.tokens["--yxq-base-solid"].dark),
+  springLayer.tokens["--yxq-base-solid"].dark,
 );
 check(
-  "medium 档下发两层不透明度",
-  springLayer.tokens["--yxq-art-wash-opacity"].light === "0.12" &&
-    springLayer.tokens["--yxq-art-band-opacity"].light === "0.50",
-  `${springLayer.tokens["--yxq-art-wash-opacity"].light} / ${springLayer.tokens["--yxq-art-band-opacity"].light}`,
+  "art 开启时下发三张素材 URL",
+  String(springLayer.tokens["--yxq-art-image"].light).includes("skin-spring.jpg") &&
+    String(springLayer.tokens["--yxq-scene-image"].light).includes("scene-spring.png") &&
+    String(springLayer.tokens["--yxq-figure-image"].light).includes("figure-spring.png"),
+);
+check(
+  "medium 档下发抠图不透明度与边缘渐入宽度",
+  springLayer.tokens["--yxq-cutout-opacity"].light === "0.78" &&
+    springLayer.tokens["--yxq-cutout-edge"].light === "9%",
+  `${springLayer.tokens["--yxq-cutout-opacity"].light} / ${springLayer.tokens["--yxq-cutout-edge"].light}`,
+);
+check(
+  "medium 档晕影 alpha 由档位算出（不是调色板里的死值）",
+  springLayer.tokens["--yxq-art-veil-core"].light === "rgba(236, 242, 237, 0.86)" &&
+    springLayer.tokens["--yxq-art-veil-edge"].light === "rgba(236, 242, 237, 0.28)",
+  `${springLayer.tokens["--yxq-art-veil-core"].light} / ${springLayer.tokens["--yxq-art-veil-edge"].light}`,
+);
+// 需求核心：抠图在晕影之上，所以晕影中心必须比四周厚（保护正文），
+// 而抠图为高不透明度，从而"比原图更明显"。
+check(
+  "晕影中心比四周厚（正文区被压得更暗）",
+  Number(springLayer.tokens["--yxq-art-veil-core"].light.match(/[\d.]+\)$/)[0].slice(0, -1)) >
+    Number(springLayer.tokens["--yxq-art-veil-edge"].light.match(/[\d.]+\)$/)[0].slice(0, -1)),
 );
 
 const noArtRun = applyWith(
-  JSON.stringify({ enabled: true, skin: "spring", font: "wenkai", art: "off", motif: false }),
+  JSON.stringify({ enabled: true, skin: "spring", font: "wenkai", art: "off" }),
 );
 check(
-  "art 关闭（字符串 \"off\"）时立绘 token 为 none",
-  noArtRun.record.overrideTokens[0].tokens["--yxq-art-image"].light === "none",
-  noArtRun.record.overrideTokens[0].tokens["--yxq-art-image"].light,
+  'art 关闭（字符串 "off"）时三张素材都为 none',
+  ["--yxq-art-image", "--yxq-scene-image", "--yxq-figure-image"].every(
+    (token) => noArtRun.record.overrideTokens[0].tokens[token].light === "none",
+  ),
 );
 check(
-  "art 关闭时不透明度为 0",
-  noArtRun.record.overrideTokens[0].tokens["--yxq-art-band-opacity"].light === "0",
+  "art 关闭时抠图不透明度为 0",
+  noArtRun.record.overrideTokens[0].tokens["--yxq-cutout-opacity"].light === "0",
 );
 check(
-  "art 关闭时表面保持不透明 hex（回归防线：\"off\" 是字符串，别被当成真值）",
-  /^#[0-9a-f]{6}$/i.test(noArtRun.record.overrideTokens[0].tokens["--dsw-alias-bg-layer-1"].light),
-  noArtRun.record.overrideTokens[0].tokens["--dsw-alias-bg-layer-1"].light,
+  'art 关闭时 bg-base 恢复为不透明 hex（回归防线："off" 是字符串，别被当成真值）',
+  /^#[0-9a-f]{6}$/i.test(noArtRun.record.overrideTokens[0].tokens["--dsw-alias-bg-base"].light),
+  noArtRun.record.overrideTokens[0].tokens["--dsw-alias-bg-base"].light,
 );
 
 const strongRun = applyWith(
   JSON.stringify({ enabled: true, skin: "snow", font: "wenkai", art: "strong" }),
 );
+const strongLayer = strongRun.record.overrideTokens[0];
 check(
-  "strong 档比 medium 更明显",
-  Number(strongRun.record.overrideTokens[0].tokens["--yxq-art-band-opacity"].light) >
-    Number(springLayer.tokens["--yxq-art-band-opacity"].light),
+  "strong 档抠图比 medium 更明显",
+  Number(strongLayer.tokens["--yxq-cutout-opacity"].light) >
+    Number(springLayer.tokens["--yxq-cutout-opacity"].light),
+);
+check(
+  "strong 档晕影更薄（原图露得更多）",
+  Number(strongLayer.tokens["--yxq-art-veil-core"].dark.match(/[\d.]+\)$/)[0].slice(0, -1)) <
+    Number(springLayer.tokens["--yxq-art-veil-core"].dark.match(/[\d.]+\)$/)[0].slice(0, -1)),
 );
 const legacyArtRun = applyWith(
   JSON.stringify({ enabled: true, skin: "spring", font: "wenkai", art: true }),
 );
 check(
   "旧版 boolean art:true 平滑迁移到 medium",
-  legacyArtRun.record.overrideTokens[0].tokens["--yxq-art-band-opacity"].light === "0.50",
+  legacyArtRun.record.overrideTokens[0].tokens["--yxq-cutout-opacity"].light === "0.78",
 );
 
 console.log("\n[8] 关闭开关时零注册");
 const offRun = applyWith(
-  JSON.stringify({ enabled: false, skin: "spring", font: "wenkai", art: true, motif: true }),
+  JSON.stringify({ enabled: false, skin: "spring", font: "wenkai", art: "medium" }),
 );
 check("关闭时不注册 token 层", offRun.record.overrideTokens.length === 0,
   `得到 ${offRun.record.overrideTokens.length}`);
@@ -418,41 +496,88 @@ check(
   springRun.boot.document.styles.every((s) => s.getAttribute("data-plugin") === PACKAGE_NAME),
 );
 
-console.log("\n[9b] 装饰层：四边带 + 薄纱，且不再有云纹贴图");
+console.log("\n[9b] 画面层：结构上位于全部内容之下（所有文字在图片之上）");
 const decorStyles = springRun.boot.document.styles
   .map((s) => s.textContent)
-  .filter((css) => css.includes(".yxq-decor"))
+  .filter((css) => css.includes("body::before") || css.includes("body::after"))
   .join("\n");
-check("存在 .yxq-decor 根层", decorStyles.includes(".yxq-decor{"));
-check("存在整屏薄纱 .yxq-decor__wash", decorStyles.includes(".yxq-decor__wash"));
-check("存在四边带 .yxq-decor__band", decorStyles.includes(".yxq-decor__band"));
+
+// 核心保证：画面挂在 html 的背景 + 负 z-index 伪元素上。
+// 负 z-index 的伪元素绘制在「父元素背景之上、全部正常流内容之下」，
+// 因此"文字在图片之上"由绘制顺序决定，而不是靠调不透明度。
 check(
-  "薄纱用 wash 不透明度 token",
-  decorStyles.includes("opacity:var(--yxq-art-wash-opacity)"),
+  "原图、晕影与左侧护罩同在 body::after 的背景层里（层序：护罩 → 晕影 → 原图）",
+  /body::after\{[^}]*background-image:linear-gradient\(to right[^;]*radial-gradient[^;]*var\(--yxq-art-image\)/.test(
+    decorStyles,
+  ),
+  (decorStyles.match(/body::after\{[^}]*background-image:[^;]*/) ?? [""])[0].slice(0, 140),
+);
+// 回归防线：Windows 标题栏模式下，全屏框架 .frame 的背景用的是
+// sidebar-fill 而**不是** bg-base。只把 bg-base 改透明，框架依然不透明，
+// 画面照样被整片挡住 —— 这一点是拿浏览器实测诊断确认的。
+check(
+  "art 开启时 sidebar-fill 也透明（.frame 用的是它，不只 bg-base）",
+  springLayer.tokens["--dsw-specific-sidebar-fill"].dark === "transparent" &&
+    springLayer.tokens["--dsw-specific-sidebar-fill"].light === "transparent",
+  springLayer.tokens["--dsw-specific-sidebar-fill"].dark,
 );
 check(
-  "四边带用 band 不透明度 token",
-  decorStyles.includes("opacity:var(--yxq-art-band-opacity)"),
+  "html 与 body 都有不透明底色（bg-base 已透明，画布必须另有实底）",
+  (decorStyles.match(/background-color:var\(--yxq-base-solid\)/g) ?? []).length >= 2,
 );
-check("装饰层不拦截交互", decorStyles.includes("pointer-events:none"));
+check("晕影是 body::after", decorStyles.includes("body::after{"));
+check("抠图是 body::before", decorStyles.includes("body::before{"));
+check(
+  "晕影在负层 z-index:-2",
+  /body::after\{[^}]*z-index:-2/.test(decorStyles),
+);
+check(
+  "抠图在负层 z-index:-1（因此位于晕影之上，不被压暗）",
+  /body::before\{[^}]*z-index:-1/.test(decorStyles),
+);
+check(
+  "抠图层同时铺人物与背景（人物在前）",
+  decorStyles.includes("var(--yxq-figure-image),var(--yxq-scene-image)"),
+);
+check(
+  "抠图层不透明度走 --yxq-cutout-opacity",
+  decorStyles.includes("opacity:var(--yxq-cutout-opacity)"),
+);
+check(
+  "body 建立堆叠上下文 isolation:isolate（否则负层伪元素落在 body 背景之下）",
+  /body\{[^}]*isolation:isolate/.test(decorStyles),
+);
+check("画面层不拦截交互", decorStyles.includes("pointer-events:none"));
+
+// 需求核心：抠图边缘要有渐入，把硬边与背后的原图衔接起来。
+const cutoutRule = /body::before\{([^}]*)\}/.exec(decorStyles)?.[1] ?? "";
+const DIRS = ["right", "left", "bottom", "top"];
+function declaredValue(rule, property) {
+  const i = rule.indexOf(`${property}:`);
+  if (i === -1) return "";
+  const end = rule.indexOf(";", i);
+  return rule.slice(i, end === -1 ? rule.length : end);
+}
+for (const prop of ["mask-image", "-webkit-mask-image"]) {
+  const value = declaredValue(cutoutRule, prop);
+  const ok = DIRS.every((dir) => value.includes(`linear-gradient(to ${dir},transparent 0,#000`));
+  check(`抠图层的 ${prop} 含 4 个方向的边缘渐入`, ok, value.slice(0, 90));
+}
+check("渐入宽度走 --yxq-cutout-edge token", cutoutRule.includes("var(--yxq-cutout-edge)"));
+
+// 回归防线：上一版把画面放进 shell.overlay（内容之上的浮层），直接盖住对话文字。
+check(
+  "不再注册 shell.overlay（那是内容之上的浮层，会盖住文字）",
+  !springRun.record.injects.includes("shell.overlay"),
+  springRun.record.injects.join(", "),
+);
+check("样式表里不再有 .yxq-decor 装饰层", !allStyles.includes(".yxq-decor"));
+
 // 回归防线：第一版的云纹贴图在界面上看起来像一片时钟，用户明确不要。
 check(
   "不再有铺满整帧的重复云纹贴图",
   !allStyles.includes("yxq-motif") && !allStyles.includes("background-repeat:repeat;"),
   "发现重复贴图动机",
-);
-// 回归防线：装饰绝不能回到 body 背景上 —— 应用根容器会整片盖住它。
-check(
-  "没有把立绘挂回 body 背景（会被应用根容器盖住）",
-  !allStyles.includes("background-attachment"),
-  "发现 background-attachment，说明旧实现又回来了",
-);
-// 回归防线：第一版的径向遮罩半径超过视口，把立绘整片遮掉了。
-check(
-  "四边带遮罩是矩形带，不是会遮满全屏的径向渐变",
-  decorStyles.includes("linear-gradient(to left") &&
-    decorStyles.includes("linear-gradient(to bottom") &&
-    !/mask-image:radial-gradient/.test(decorStyles),
 );
 
 console.log("\n[9c] 互斥：重压栈让本层始终在栈顶，且不靠 !important 抢 token");

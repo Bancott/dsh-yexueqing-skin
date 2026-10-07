@@ -1,0 +1,14 @@
+# 统一换行符，避免跨平台 diff 噪声
+* text=auto eol=lf
+
+# 二进制素材不要做任何行尾/编码处理
+*.ttf binary
+*.woff2 binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.ico binary
+
+# 生成产物在 diff 里不必高亮
+*.mjs text
