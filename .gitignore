@@ -15,6 +15,3 @@ assets/LXGWWenKaiGB-Regular.ttf
 
 # 本地草稿
 .scratch/
-
-# 临时诊断输出（发布前连同 index.js/client.js 里的诊断代码一起删掉）
-diag.json
