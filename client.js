@@ -73,9 +73,9 @@
        *                      它在晕影之上，所以四周的画面是清晰、不被压暗的。
        */
       const ART_STRENGTHS = {
-        soft: { veilCore: "0.90", veilMid: "0.66", veilEdge: "0.32", band: "0.55" },
-        medium: { veilCore: "0.80", veilMid: "0.50", veilEdge: "0.20", band: "0.78" },
-        strong: { veilCore: "0.72", veilMid: "0.38", veilEdge: "0.12", band: "0.94" },
+        soft: { veilCore: "0.84", veilMid: "0.56", veilEdge: "0.26", band: "0.55" },
+        medium: { veilCore: "0.70", veilMid: "0.42", veilEdge: "0.16", band: "0.78" },
+        strong: { veilCore: "0.60", veilMid: "0.32", veilEdge: "0.10", band: "0.94" },
       };
 
       // ══════════════════════════════════════════════════════════════════
@@ -128,8 +128,11 @@
               accent: "#B8933F",
               accentSoft: "rgba(184, 147, 63, 0.16)",
               elevationStroke: "rgba(90, 136, 119, 0.38)",
-              /** 晕影底色：取自画面暗部（采样 #746963）调成暖橄榄，alpha 由 ART_STRENGTHS 决定。 */
-              veil: "#E8E4D6",
+              /** 晕影底色：采样画面中心区暗部（#79756C）压暗并加饱和 -> 暖橄榄褐。 */
+              veil: "#E4DFCE",
+              railMark: "#5E8672",
+              railActive: "#B8933F",
+              railPreview: "#7C9C8B",
               // ↓ 以下 token 不在主题注册表里，但 overrideTokens 允许任意名字
               //   （validateOverrides 只校验 {light,dark} 形状，composeActive 直接合并），
               //   于是同样能自动跟随明暗与开关。
@@ -164,7 +167,10 @@
               accent: "#DCC183",
               accentSoft: "rgba(220, 193, 131, 0.20)",
               elevationStroke: "rgba(168, 192, 184, 0.38)",
-              veil: "#2C3428",
+              veil: "#4A483A",
+              railMark: "#9CC4AC",
+              railActive: "#F2DCA0",
+              railPreview: "#C6D6CB",
               textTertiary: "#A8BDB2",
               textCaption: "#8FA79B",
               textDimmed: "#CBDAD2",
@@ -203,8 +209,11 @@
               accent: "#A8873F",
               accentSoft: "rgba(168, 135, 63, 0.16)",
               elevationStroke: "rgba(81, 119, 158, 0.38)",
-              /** 晕影底色：取自画面暗部（采样 #ADBCCF）调成冷蓝灰。 */
-              veil: "#DFE6EF",
+              /** 晕影底色：采样画面中心区暗部（#9EACC2）压暗 -> 冷蓝灰。 */
+              veil: "#DDE5EF",
+              railMark: "#5E7A9C",
+              railActive: "#A8873F",
+              railPreview: "#7E92A8",
               textTertiary: "#4C6076",
               textCaption: "#62748A",
               textDimmed: "#38485A",
@@ -236,7 +245,10 @@
               accent: "#D6C08F",
               accentSoft: "rgba(214, 192, 143, 0.20)",
               elevationStroke: "rgba(169, 190, 208, 0.38)",
-              veil: "#1E2836",
+              veil: "#3E4856",
+              railMark: "#A2B8D4",
+              railActive: "#EDD9A6",
+              railPreview: "#C6D2E2",
               textTertiary: "#A9B9CB",
               textCaption: "#8FA2B8",
               textDimmed: "#CCD9E6",
@@ -289,6 +301,9 @@
         accent: "--yxq-accent",
         accentSoft: "--yxq-accent-soft",
         elevationStroke: "--dsw-elevation-stroke-color",
+        railMark: "--yxq-rail-mark",
+        railActive: "--yxq-rail-active",
+        railPreview: "--yxq-rail-preview",
       };
 
       /**
@@ -635,6 +650,36 @@ body::before{
   mask-image:linear-gradient(to left,#000 0%,rgba(0,0,0,0) 32%),
     linear-gradient(to bottom,#000 0%,rgba(0,0,0,0) 17%,rgba(0,0,0,0) 83%,#000 100%),
     linear-gradient(to right,rgba(0,0,0,0.40) 0%,rgba(0,0,0,0) 11%)}
+
+/* ── 右侧对话定位横线（turn rail）─────────────────────────────────────
+   DSH 把这排横线的颜色写死在两个 token 上，而且未激活态还额外被
+   scaleX(.6) 缩到 12px，压在同样深的晕影上几乎看不见：
+     .mark:before        { background: border-l4;  scaleX(.6) }
+     .markUnloaded:before{ opacity:.6;             scaleX(.4) }
+     .markActive:before  { background: label-primary; scaleX(1) }
+   border-l4 已在 token 层提亮，这里再补一层更明确的颜色与宽度。
+
+   选择器只用 **结构 + 后缀匹配**，不引用完整的哈希类名：
+   [class*="_marks"] 在全库里唯一命中这排横线的容器
+   （_mark / _marker / _markdownPayload / _marks 之类都不会误伤），
+   button 限定为按钮。哈希前缀随 DSH 版本变化也不影响命中；
+   万一本地类名被改名，这几条规则就静默失效 —— 只影响观感，不会坏界面。
+
+   刻意保留"当前 / 预览 / 历史"三档的宽度差异（1 / .9 / .75），
+   只提亮、加宽一点点，不把它们抹平。 */
+[class*="_marks"] button:before{
+  background:var(--yxq-rail-mark);
+  transform:translateY(-50%) scaleX(.75)}
+[class*="_marks"] button[class*="markUnloaded"]:before{
+  opacity:.85;
+  transform:translateY(-50%) scaleX(.55)}
+[class*="_marks"] button[class*="markPreview"]:before{
+  background:var(--yxq-rail-preview);
+  opacity:1;
+  transform:translateY(-50%) scaleX(.9)}
+[class*="_marks"] button[class*="markActive"]:before{
+  background:var(--yxq-rail-active);
+  transform:translateY(-50%) scaleX(1)}
 
 .yxq-stack{display:flex;flex-direction:column;gap:14px;padding:2px 0 8px}
 .yxq-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:32px}

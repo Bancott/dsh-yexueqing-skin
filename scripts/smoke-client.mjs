@@ -416,9 +416,9 @@ check(
 );
 check(
   "medium 档晕影 alpha 由档位算出（不是调色板里的死值）",
-  // 底色是取自画面暗部的暖橄榄 #E8E4D6，不是原来的冷灰绿
-  springLayer.tokens["--yxq-art-veil-core"].light === "rgba(232, 228, 214, 0.80)" &&
-    springLayer.tokens["--yxq-art-veil-edge"].light === "rgba(232, 228, 214, 0.20)",
+  // 底色按"画面中心区暗部"采样压暗（暖橄榄褐 #E4DFCE），alpha 也调轻了
+  springLayer.tokens["--yxq-art-veil-core"].light === "rgba(228, 223, 206, 0.70)" &&
+    springLayer.tokens["--yxq-art-veil-edge"].light === "rgba(228, 223, 206, 0.16)",
   `${springLayer.tokens["--yxq-art-veil-core"].light} / ${springLayer.tokens["--yxq-art-veil-edge"].light}`,
 );
 // 需求核心：抠图在晕影之上，所以晕影中心必须比四周厚（保护正文），
@@ -558,6 +558,37 @@ check(
   /body\{[^}]*isolation:isolate/.test(decorStyles),
 );
 check("画面层不拦截交互", decorStyles.includes("pointer-events:none"));
+// 右侧对话定位横线（turn rail）：颜色原先写死在 border-l4 上，
+// 且未激活态被 scaleX(.6) 缩到 12px，压在深晕影上几乎看不见。
+check(
+  "turn rail 的历史横线读我们的颜色 token",
+  /\[class\*="_marks"\] button:before\{[^}]*background:var\(--yxq-rail-mark\)/.test(decorStyles) ||
+    /\[class\*="_marks"\] button:before\{[^}]*background:var\(--yxq-rail-mark\)/.test(decorStyles),
+);
+check(
+  "turn rail 用结构 + 后缀选择器（不引用完整哈希类名）",
+  decorStyles.includes('[class*="_marks"]') && !/\.xpvNua_|\.Dc7zOa_|\.cJsG2q_/.test(decorStyles),
+);
+check(
+  "turn rail 保留当前/预览/历史三档宽度差异（只提亮不抹平）",
+  (decorStyles.match(/scaleX\(\.75\)/) ?? []).length === 1 &&
+    (decorStyles.match(/scaleX\(\.9\)/) ?? []).length === 1 &&
+    (decorStyles.match(/scaleX\(1\)/) ?? []).length === 1,
+);
+check(
+  "已加载但非当前的横线不再被额外压暗（只对 Unloaded 降透明）",
+  /class\*="markUnloaded"[^}]*opacity:\.85/.test(decorStyles),
+);
+check(
+  "rail 三色 token 已下发",
+  ["--yxq-rail-mark", "--yxq-rail-active", "--yxq-rail-preview"].every(
+    (token) => springLayer.tokens[token] !== undefined,
+  ),
+);
+check(
+  "rail 当前项与历史项颜色明显不同（对比度）",
+  springLayer.tokens["--yxq-rail-active"].dark !== springLayer.tokens["--yxq-rail-mark"].dark,
+);
 // 主题注册表只有 34 个 token，而界面大量使用更细的层级。overrideTokens
 // 允许任意名字（validateOverrides 只校验 {light,dark} 形状），因此这些
 // 也能走同一层下发 —— 这正是"底部轮数行/标签页发灰看不清"的解法。
