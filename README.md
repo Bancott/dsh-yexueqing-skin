@@ -167,6 +167,23 @@ npm run feather-cutouts      # 用 pngjs 对 alpha 通道做两趟盒式模糊�
 `--dsw-alias-label-primary` 的暗色值是 `#F2F8F5`，比 DSH 默认的 `#E1E5EE`
 更亮；边框与状态色同理。因此不存在"用了皮肤之后某个文字变淡"的情形。
 
+**做法三：把"更弱的一档"反过来提亮。** 主题注册表只暴露 34 个 token，
+而界面实际大量使用更细的层级，它们此前完全不受皮肤控制 —— 这正是
+"底部轮数那一行、标签页、面包屑发灰看不清"的根因。查清后按需提亮：
+
+| token | 界面上的位置 |
+|---|---|
+| `--dsw-alias-label-tertiary` | **底部轮数 / 步数 / tok 统计行**、标签页、面包屑、文件大小 |
+| `--dsw-alias-label-caption` | 更弱的说明文字、2px 分隔点 |
+| `--dsw-alias-label-primary-dimmed` | 文件名、内容预览 |
+| `--dsw-alias-button-elevated-fill` | **「新对话」按钮的填色**（原来是原生灰） |
+| `--dsw-alias-interactive-bg-hover` | 悬停态填色 |
+| `--dsw-alias-border-l4` | **右侧对话定位横线（turn rail）里的"历史对话条"** |
+
+它们**不在注册表里，却一样能覆盖** —— 见下方「注册表之外的 token」。
+注意方向：这些是**提亮**，与"不主动调淡"的要求一致；
+`label-secondary` / `state-idle-primary` 仍然不覆盖。
+
 ### 4. 互斥怎么实现：重压栈，而不是 `!important`
 
 需求是「用我们的皮肤时其他皮肤失效，关掉后回退到默认」。实现方式是
@@ -214,6 +231,41 @@ npm run feather-cutouts      # 用 pngjs 对 alpha 通道做两趟盒式模糊�
   `--yxq-figure-image` / `--yxq-figure-position`、
   `--yxq-band-opacity` / `--yxq-band-edge`、`--yxq-art-veil-{edge,mid,core}`。
   它们走同一覆盖层，因此也自动跟随明暗与开关。
+
+### 5b. 注册表之外的 token（本插件最实用的一处发现）
+
+`overrideTokens` 的文档原文是：
+
+> stacks partial token layers over the active theme **without touching the registry**
+
+而 `validateOverrides` 只校验 `{ light, dark }` 形状、`composeActive` 直接
+合并任意名字、ThemePresenter 把合并结果整份写成 `body` 的**内联自定义属性**。
+
+**结论：任何 CSS 自定义属性都能走这一层下发**，于是自动获得
+「跟随明暗 + 随开关装卸 + 与其他皮肤抢栈」的全部好处，不必自己写样式表、
+也不必自己处理 `data-ds-dark-theme`。
+
+`EXTRA_TOKEN_MAP` 就是这个机制的落点：
+
+```js
+const EXTRA_TOKEN_MAP = {
+  textTertiary:   "--dsw-alias-label-tertiary",
+  textCaption:    "--dsw-alias-label-caption",
+  textDimmed:     "--dsw-alias-label-primary-dimmed",
+  buttonElevated: "--dsw-alias-button-elevated-fill",
+  hoverFill:      "--dsw-alias-interactive-bg-hover",
+};
+```
+
+排查时的有效手段：`Theme.listTokens` 巡检返回的是**当前生效**的 token 名单 ——
+覆盖成功后新 token 会直接出现在列表里，一眼可验（这五个确实出现了）。
+
+**边界**：token 只能改颜色这类"可变量"。像 turn rail 里
+`transform: scaleX(.6)` / 未加载态的 `opacity:.6` 是**写死在 DSH 里的几何**，
+token 改不动；强行去改就得引用 DSH 的内部类名（CSS-module 哈希，升版即失效），
+本插件刻意不做 —— 只把颜色提亮到足够看清。
+
+---
 
 ### 6. 字体
 

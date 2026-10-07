@@ -73,9 +73,9 @@
        *                      它在晕影之上，所以四周的画面是清晰、不被压暗的。
        */
       const ART_STRENGTHS = {
-        soft: { veilCore: "0.92", veilMid: "0.72", veilEdge: "0.40", band: "0.55" },
-        medium: { veilCore: "0.86", veilMid: "0.60", veilEdge: "0.28", band: "0.78" },
-        strong: { veilCore: "0.78", veilMid: "0.48", veilEdge: "0.18", band: "0.94" },
+        soft: { veilCore: "0.90", veilMid: "0.66", veilEdge: "0.32", band: "0.55" },
+        medium: { veilCore: "0.80", veilMid: "0.50", veilEdge: "0.20", band: "0.78" },
+        strong: { veilCore: "0.72", veilMid: "0.38", veilEdge: "0.12", band: "0.94" },
       };
 
       // ══════════════════════════════════════════════════════════════════
@@ -112,7 +112,7 @@
               border1: "#D5E1D9",
               border2: "#BCCDC2",
               border3: "#A6BCAE",
-              border4: "#C6D6CB",
+              border4: "#A9C0B3",
               cardFill: "#FFFFFF",
               cardStroke: "#D3E0D7",
               brand: "#5A8877",
@@ -128,8 +128,16 @@
               accent: "#B8933F",
               accentSoft: "rgba(184, 147, 63, 0.16)",
               elevationStroke: "rgba(90, 136, 119, 0.38)",
-              /** 晕影底色；alpha 由 ART_STRENGTHS 决定。 */
-              veil: "#ECF2ED",
+              /** 晕影底色：取自画面暗部（采样 #746963）调成暖橄榄，alpha 由 ART_STRENGTHS 决定。 */
+              veil: "#E8E4D6",
+              // ↓ 以下 token 不在主题注册表里，但 overrideTokens 允许任意名字
+              //   （validateOverrides 只校验 {light,dark} 形状，composeActive 直接合并），
+              //   于是同样能自动跟随明暗与开关。
+              textTertiary: "#4E6B5D",
+              textCaption: "#63796D",
+              textDimmed: "#3A4F45",
+              buttonElevated: "rgba(255, 255, 255, 0.62)",
+              hoverFill: "rgba(90, 136, 119, 0.12)",
             },
             dark: {
               base: "#0D1513",
@@ -140,7 +148,7 @@
               border1: "#283832",
               border2: "#3A5047",
               border3: "#4A6357",
-              border4: "#33473E",
+              border4: "#4E6A5C",
               cardFill: "#18241F",
               cardStroke: "#2E4038",
               brand: "#A8C0B8",
@@ -156,7 +164,12 @@
               accent: "#DCC183",
               accentSoft: "rgba(220, 193, 131, 0.20)",
               elevationStroke: "rgba(168, 192, 184, 0.38)",
-              veil: "#0B110F",
+              veil: "#2C3428",
+              textTertiary: "#A8BDB2",
+              textCaption: "#8FA79B",
+              textDimmed: "#CBDAD2",
+              buttonElevated: "rgba(94, 128, 112, 0.42)",
+              hoverFill: "rgba(150, 190, 170, 0.14)",
             },
           },
         },
@@ -174,7 +187,7 @@
               border1: "#D2DEEA",
               border2: "#B8C8D9",
               border3: "#A2B5C9",
-              border4: "#C3D1E0",
+              border4: "#A6BACF",
               cardFill: "#FFFFFF",
               cardStroke: "#D0DCE9",
               brand: "#51779E",
@@ -190,7 +203,13 @@
               accent: "#A8873F",
               accentSoft: "rgba(168, 135, 63, 0.16)",
               elevationStroke: "rgba(81, 119, 158, 0.38)",
-              veil: "#EAF0F7",
+              /** 晕影底色：取自画面暗部（采样 #ADBCCF）调成冷蓝灰。 */
+              veil: "#DFE6EF",
+              textTertiary: "#4C6076",
+              textCaption: "#62748A",
+              textDimmed: "#38485A",
+              buttonElevated: "rgba(255, 255, 255, 0.62)",
+              hoverFill: "rgba(81, 119, 158, 0.12)",
             },
             dark: {
               base: "#0B1119",
@@ -201,7 +220,7 @@
               border1: "#232F3D",
               border2: "#334154",
               border3: "#415063",
-              border4: "#2C3846",
+              border4: "#44586E",
               cardFill: "#151E29",
               cardStroke: "#283646",
               brand: "#A9BED0",
@@ -217,7 +236,12 @@
               accent: "#D6C08F",
               accentSoft: "rgba(214, 192, 143, 0.20)",
               elevationStroke: "rgba(169, 190, 208, 0.38)",
-              veil: "#090E15",
+              veil: "#1E2836",
+              textTertiary: "#A9B9CB",
+              textCaption: "#8FA2B8",
+              textDimmed: "#CCD9E6",
+              buttonElevated: "rgba(96, 122, 152, 0.42)",
+              hoverFill: "rgba(150, 175, 205, 0.14)",
             },
           },
         },
@@ -265,6 +289,31 @@
         accent: "--yxq-accent",
         accentSoft: "--yxq-accent-soft",
         elevationStroke: "--dsw-elevation-stroke-color",
+      };
+
+      /**
+       * **注册表之外**的 token —— 本插件最实用的一处发现。
+       *
+       * ui-theme 的 `overrideTokens` 明确是"把部分 token 层叠到当前主题之上、
+       * 不触碰注册表"，而 `validateOverrides` 只校验 `{light, dark}` 形状、
+       * `composeActive` 直接合并任意名字。于是**任何 CSS 自定义属性**都能走
+       * 同一层下发：自动跟随明暗、自动随开关装卸。
+       *
+       * 主题注册表只暴露 34 个 token，而界面实际大量使用下面这些更细的层级，
+       * 它们此前完全不受皮肤控制（这正是"固定 UI 文字发灰看不清"的根因）：
+       *
+       *   label-tertiary          次要/元信息文字（底部轮数统计行、标签页、面包屑）
+       *   label-caption           更弱的说明文字与 2px 分隔点
+       *   label-primary-dimmed    文件名、预览等"主体但弱一档"的文字
+       *   button-elevated-fill    「新对话」这类抬升按钮的填色
+       *   interactive-bg-hover    悬停态填色
+       */
+      const EXTRA_TOKEN_MAP = {
+        textTertiary: "--dsw-alias-label-tertiary",
+        textCaption: "--dsw-alias-label-caption",
+        textDimmed: "--dsw-alias-label-primary-dimmed",
+        buttonElevated: "--dsw-alias-button-elevated-fill",
+        hoverFill: "--dsw-alias-interactive-bg-hover",
       };
 
       /**
@@ -427,6 +476,7 @@
 
         assign(TOKEN_MAP, skin.palette.light, skin.palette.dark);
         assign(DECOR_TOKEN_MAP, skin.palette.light, skin.palette.dark);
+        assign(EXTRA_TOKEN_MAP, skin.palette.light, skin.palette.dark);
 
         // ── 关键决定：`bg-base` 置为**完全透明** ──────────────────────────
         //
@@ -897,7 +947,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,
                 zh: {
                   "appearance.title": "外观皮肤",
                   "appearance.hint": "启用后全界面切换到叶雪青主题",
-                  "section.title": "叶雪青",
+                  "section.title": "叶雪青主题",
                   "section.subtitle": "逆水寒 · 叶雪青主题皮肤",
                   "section.master": "叶雪青主题",
                   "section.masterHint": "关闭后完全回到 DSH 原生外观",
@@ -928,7 +978,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,
                 en: {
                   "appearance.title": "Appearance skin",
                   "appearance.hint": "Switch the whole UI to the Ye Xueqing theme",
-                  "section.title": "Ye Xueqing",
+                  "section.title": "Ye Xueqing Theme",
                   "section.subtitle": "Justice Online · Ye Xueqing theme skin",
                   "section.master": "Ye Xueqing theme",
                   "section.masterHint": "Turn off to return fully to the default DSH look",

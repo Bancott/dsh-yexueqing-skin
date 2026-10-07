@@ -416,8 +416,9 @@ check(
 );
 check(
   "medium 档晕影 alpha 由档位算出（不是调色板里的死值）",
-  springLayer.tokens["--yxq-art-veil-core"].light === "rgba(236, 242, 237, 0.86)" &&
-    springLayer.tokens["--yxq-art-veil-edge"].light === "rgba(236, 242, 237, 0.28)",
+  // 底色是取自画面暗部的暖橄榄 #E8E4D6，不是原来的冷灰绿
+  springLayer.tokens["--yxq-art-veil-core"].light === "rgba(232, 228, 214, 0.80)" &&
+    springLayer.tokens["--yxq-art-veil-edge"].light === "rgba(232, 228, 214, 0.20)",
   `${springLayer.tokens["--yxq-art-veil-core"].light} / ${springLayer.tokens["--yxq-art-veil-edge"].light}`,
 );
 // 需求核心：抠图在晕影之上，所以晕影中心必须比四周厚（保护正文），
@@ -557,6 +558,35 @@ check(
   /body\{[^}]*isolation:isolate/.test(decorStyles),
 );
 check("画面层不拦截交互", decorStyles.includes("pointer-events:none"));
+// 主题注册表只有 34 个 token，而界面大量使用更细的层级。overrideTokens
+// 允许任意名字（validateOverrides 只校验 {light,dark} 形状），因此这些
+// 也能走同一层下发 —— 这正是"底部轮数行/标签页发灰看不清"的解法。
+check(
+  "下发注册表之外的细层级 token（label-tertiary / caption / dimmed / 按钮填色 / 悬停）",
+  [
+    "--dsw-alias-label-tertiary",
+    "--dsw-alias-label-caption",
+    "--dsw-alias-label-primary-dimmed",
+    "--dsw-alias-button-elevated-fill",
+    "--dsw-alias-interactive-bg-hover",
+  ].every((token) => springLayer.tokens[token] !== undefined),
+);
+check(
+  "label-tertiary 比主题默认更亮（固定 UI 只提亮、不变淡）",
+  springLayer.tokens["--dsw-alias-label-tertiary"].dark === "#A8BDB2",
+  springLayer.tokens["--dsw-alias-label-tertiary"].dark,
+);
+check(
+  "「新对话」按钮改成贴画面的半透明填色（不再是原生灰）",
+  String(springLayer.tokens["--dsw-alias-button-elevated-fill"].dark).startsWith("rgba("),
+  springLayer.tokens["--dsw-alias-button-elevated-fill"].dark,
+);
+// 右侧对话横线（turn rail）里"历史对话条"用的是 border-l4，原来是近黑的深绿
+check(
+  "border-l4 提亮到能在画面上看清（turn rail 的历史对话条）",
+  springLayer.tokens["--dsw-alias-border-l4"].dark === "#4E6A5C",
+  springLayer.tokens["--dsw-alias-border-l4"].dark,
+);
 
 // 需求核心：抠图边缘要有渐入，把硬边与背后的原图衔接起来。
 const cutoutRule = /body::before\{([^}]*)\}/.exec(decorStyles)?.[1] ?? "";
